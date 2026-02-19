@@ -25,6 +25,15 @@ impl From<Register> for usize {
     }
 }
 
+fn convert_str_to_i16_vec(str: &str) -> Vec<i16> {
+    let mut res = Vec::with_capacity(str.len());
+    for s in str.bytes() {
+        res.push(s as i16);
+    }
+
+    res
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Instruction(pub i16);
 
@@ -120,12 +129,74 @@ impl Instruction {
         self.check_header(0b0101)
     }
 
-    // TODO
     // BR 	0000 	n 	z	p 	PCoffset9
+    // flags should use only 3 bits, each representing a condition code
+    pub fn branch(flags: u8, ip_offset: i8) -> Self {
+        assert!(flags < 8);
+
+        let mut instr: i16 = ((flags & 0b111) as i16) << 9;
+
+        instr |= (ip_offset as i16) & 0b11111111;
+
+        Instruction(instr)
+    }
+
+    // returns flags and the ip offset separately.
+    pub fn get_branch(&self) -> Option<(u8, i8)> {
+        if self.check_header(0b0000) {
+            Some((
+                (((self.0 as u16) >> 9) & 0b111) as u8,
+                (self.0 & 0b11111111) as i8,
+            ))
+        } else {
+            None
+        }
+    }
+
     // JMP 	1100 	000  BaseR 	000000
+    pub fn jmp(reg: impl Into<u8>) -> Self {
+        let mut instr: i16 = 0b1100 << 12;
+
+        instr |= (reg.into() as i16) << 6;
+
+        Instruction(instr)
+    }
+
+    pub fn get_jmp(&self) -> Option<Register> {
+        if self.check_header(0b1100) {
+            Some((((self.0 >> 6) & 0b111) as u8).into())
+        } else {
+            None
+        }
+    }
+
+    // TODO
     // JSR 	0100 	1 	 PCoffset11
     // JSRR	0100 	0 	 00 	BaseR 	000000
+
     // LD  	0010 	DR 	 PCoffset9
+    pub fn ld(dr: impl Into<u8>, ip_offset: i8) -> Self {
+        let dr = dr.into();
+
+        assert!(dr < 8);
+
+        let mut instr: i16 = 0b0010 << 12;
+
+        instr |= (dr as i16) << 9;
+        instr |= (ip_offset as i16) & 0b111111111; // casting from i8 to i16 adds leading 1s
+
+        Instruction(instr)
+    }
+
+    pub fn get_ld(&self) -> Option<(u8, i8)> {
+        if self.check_header(0b0010) {
+            Some((((self.0 >> 9) & 0b111) as u8, (self.0 & 0b11111111) as i8))
+        } else {
+            None
+        }
+    }
+
+    // TODO
     // LDI 	1010 	DR 	 PCoffset9
     // LDR 	0110 	DR 	 BaseR 	offset6
     // LEA 	1110 	DR 	 PCoffset9
@@ -290,12 +361,24 @@ enum ConditionCode {
     Positive,
 }
 
+impl ConditionCode {
+    fn into_flags(self) -> u8 {
+        match self {
+            ConditionCode::Negative => 0b100,
+            ConditionCode::Zero => 0b010,
+            ConditionCode::Positive => 0b001,
+        }
+    }
+}
+
 pub struct Machine<'a> {
     registers: Registers,
     memory: Vec<i16>,
     ip: u16, // LC-3 is word addressable.
     condition_code: ConditionCode,
+
     halted: bool,
+    jumped: bool,
 
     stdin: Box<dyn Read + 'a>,
     stdout: Box<dyn Write + 'a>,
@@ -321,8 +404,21 @@ impl<'a> Machine<'a> {
             ip: 0x3000,
             condition_code: ConditionCode::Zero,
             halted: false,
+            jumped: false,
             stdin: Box::new(read),
             stdout: Box::new(write),
+        }
+    }
+
+    pub fn set_memory_at(&mut self, index: u16, value: i16) {
+        self.memory[index as usize] = value;
+    }
+
+    pub fn set_span_at(&mut self, index: u16, value: &[i16]) {
+        let mut value_index = 0;
+        for i in (index as usize)..value.len() {
+            self.memory[i] = value[value_index];
+            value_index += 1;
         }
     }
 
@@ -335,7 +431,12 @@ impl<'a> Machine<'a> {
     pub fn step(&mut self) {
         self.evaluate_at_ip();
 
-        self.ip += 1;
+        // if this was not true, then evaluate changed our IP, and we should not change it ourselves.
+        if !self.jumped {
+            self.ip += 1;
+        } else {
+            self.jumped = false;
+        }
     }
 
     pub fn evaluate_at_ip(&mut self) {
@@ -348,6 +449,21 @@ impl<'a> Machine<'a> {
             self.handle_add(instr);
         } else if instr.is_and() {
             self.handle_and(instr);
+        } else if let Some((flags, offset)) = instr.get_branch() {
+            // at least one '1' matches with the condition flags
+            if (self.condition_code.into_flags() & flags) != 0 {
+                self.ip = (self.ip as i32 + offset as i32) as u16;
+                self.jumped = true;
+            }
+        } else if let Some(reg) = instr.get_jmp() {
+            self.ip = self.registers.get(reg) as u16;
+            self.jumped = true;
+        }
+        //...
+        else if let Some((dr, offset)) = instr.get_ld() {
+            // cast to i32 so that subtraction can be done properly
+            let value = self.memory[((self.ip as i32) + (offset as i32)) as usize];
+            *self.registers.get_mut(dr.into()) = value;
         }
         // ...
         else if instr.is_not() {
@@ -416,7 +532,17 @@ impl<'a> Machine<'a> {
                     .write_all(&[r0 as u8])
                     .expect("Failed to write to stdout");
             }
-            0x22 => todo!(),
+            0x22 => {
+                let mut addr = self.registers.get(Register::R0) as usize;
+                while self.memory[addr] != 0 {
+                    self.stdout
+                        .write_all(&[self.memory[addr] as u8])
+                        .expect("Failed to write to stdout");
+
+                    addr += 1;
+                }
+                self.stdout.flush().expect("Failed to flush stdout");
+            },
             0x23 => todo!(),
             0x25 => {
                 self.halted = true;
@@ -436,30 +562,28 @@ impl<'a> Machine<'a> {
 
 fn main() {
     let mut machine = Machine::new_std(&[
-        // largest immediate we can do is 7
-        // yes this can be condensed
-        Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7
-        Instruction::add_imm(Register::R1, Register::R1, 7), // r1 = 7
-        Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (14)
-        Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (21)
-        Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (28)
-        Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (35)
-        Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (42)
-        Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (49)
-        Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (56)
-        Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (63)
-        Instruction::add_imm(Register::R0, Register::R0, 2), // r0 = r0 + 2 (65, 'A' in ASCII)
-        Instruction::trap_out(),                             // print r0
-        Instruction::trap_halt(),
+        Instruction::ld(Register::R0, -1), // r0 = 65
+        Instruction::ld(Register::R1, -3), // r1 = 90
+        Instruction::not(Register::R1, Register::R1), // r1 = -90
+        Instruction::trap_out(),
+        Instruction::add_imm(Register::R0, Register::R0, 1), // r0 = r0 + 1
+        Instruction::add(Register::R2, Register::R1, Register::R0), // r2 = r1 + r0
+        Instruction::branch(0b100, -3),
+        Instruction::trap_halt(), // this should not happen since we jumped over it
     ]);
+
+    machine.set_memory_at(0x3000 - 1, 65);
+    machine.set_memory_at(0x3000 - 2, 90);
+
     machine.run_until_halt();
-    println!();
+
+    println!("\n{:?}", machine.registers);
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::BufWriter;
     use super::*;
+    use std::io::BufWriter;
 
     #[test]
     fn add_instr() {
@@ -541,23 +665,27 @@ mod tests {
     fn print_a() {
         let mut output = BufWriter::new(Vec::new());
 
-        let mut machine = Machine::new(std::io::stdin(), &mut output, &[
-            // largest immediate we can do is 7
-            // yes this can be condensed
-            Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7
-            Instruction::add_imm(Register::R1, Register::R1, 7), // r1 = 7
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (14)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (21)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (28)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (35)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (42)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (49)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (56)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (63)
-            Instruction::add_imm(Register::R0, Register::R0, 2), // r0 = r0 + 2 (65, 'A' in ASCII)
-            Instruction::trap_out(),                             // print r0
-            Instruction::trap_halt(),
-        ]);
+        let mut machine = Machine::new(
+            std::io::stdin(),
+            &mut output,
+            &[
+                // largest immediate we can do is 7
+                // yes this can be condensed
+                Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7
+                Instruction::add_imm(Register::R1, Register::R1, 7), // r1 = 7
+                Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (14)
+                Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (21)
+                Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (28)
+                Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (35)
+                Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (42)
+                Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (49)
+                Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (56)
+                Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (63)
+                Instruction::add_imm(Register::R0, Register::R0, 2), // r0 = r0 + 2 (65, 'A' in ASCII)
+                Instruction::trap_out(),                             // print r0
+                Instruction::trap_halt(),
+            ],
+        );
 
         machine.run_until_halt();
         drop(machine);
@@ -567,4 +695,83 @@ mod tests {
 
         assert_eq!(output, "A");
     }
+
+    #[test]
+    fn check_branching() {
+        let mut machine = Machine::new_std(&[
+            Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7 // flag = p
+            Instruction::branch(0b001, 2), // check if positive, then skip over the next instruction
+            Instruction::trap_halt(),
+            Instruction::add_imm(Register::R0, Register::R0, 7), // r0 = 14
+            Instruction::trap_halt(),
+        ]);
+        machine.run_until_halt();
+
+        assert_eq!(machine.registers.get(Register::R0), 14);
+
+        let mut machine = Machine::new_std(&[
+            Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7 // flag = p
+            Instruction::branch(0b110, 2), // check if negative or zero (false), so we don't jump
+            Instruction::trap_halt(),
+            Instruction::add_imm(Register::R0, Register::R0, 7), // r0 = 14
+            Instruction::trap_halt(),
+        ]);
+        machine.run_until_halt();
+
+        assert_eq!(machine.registers.get(Register::R0), 7);
+
+        let mut machine = Machine::new_std(&[
+            Instruction::branch(0b111, -1), // check if negative or zero (false), so we don't jump
+        ]);
+
+        machine.step();
+
+        assert_eq!(machine.ip, 0x3000 - 1);
+    }
+
+    #[test]
+    fn check_jmp() {
+        let mut machine = Machine::new_std(&[
+            Instruction::add_imm(Register::R0, Register::R1, 4), // r0 = 4
+            Instruction::jmp(Register::R0),                      // jmp to 4 (r0 = 4)
+            Instruction::trap_halt(), // this should not happen since we jumped over it
+        ]);
+
+        machine.step();
+        machine.step();
+
+        assert_eq!(machine.ip, 4);
+    }
+
+    #[test]
+    fn check_ld() {
+        let mut machine = Machine::new_std(&[
+            Instruction::ld(Register::R0, -1), // r0 = 50 (see code after this)
+            Instruction::trap_halt(),
+        ]);
+
+        machine.set_memory_at(0x3000 - 1, 50);
+        machine.run_until_halt();
+
+        assert_eq!(machine.registers.get(Register::R0), 50);
+    }
+
+    // #[test]
+    // fn hello_world() { // TODO
+    //     let mut output = BufWriter::new(Vec::new());
+    //
+    //     let mut machine = Machine::new(
+    //         std::io::stdin(),
+    //         &mut output,
+    //         &[
+    //             Instruction::ld(Register::R0, -1),
+    //             Instruction::trap_halt(),
+    //         ],
+    //     );
+    //
+    //     let text = "Hello, world!";
+    //     machine.set_span_at(0x3000 - text.len() as u16 - 1, &convert_str_to_i16_vec(text));
+    //
+    //     machine.run_until_halt();
+    // }
 }
