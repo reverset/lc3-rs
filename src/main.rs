@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
-use std::io::{Read, Write};
+use std::fs::File;
+use std::io::{Error, Read, Write};
+use std::path::Path;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Register {
@@ -415,11 +417,11 @@ pub struct Machine<'a> {
 // that exactly one condition code is set at all times. I suppose Zero is a sensible default.
 impl<'a> Machine<'a> {
     pub fn new_std(instructions: &[Instruction]) -> Self {
-        Self::new(std::io::stdin(), std::io::stdout(), instructions)
+        Self::new(std::io::stdin(), std::io::stdout(), 0x3000, instructions)
     }
 
-    pub fn new(read: impl Read + 'a, write: impl Write + 'a, instructions: &[Instruction]) -> Self {
-        let mut memory = Vec::from_iter((0..0x3000).map(|_| 0)); // instructions start at 0x3000.
+    pub fn new(read: impl Read + 'a, write: impl Write + 'a, orig: u16, instructions: &[Instruction]) -> Self {
+        let mut memory = Vec::from_iter((0..orig).map(|_| 0)); // instructions start at 0x3000.
         for inst in instructions {
             memory.push(inst.0);
         }
@@ -427,7 +429,7 @@ impl<'a> Machine<'a> {
         Self {
             registers: Registers::default(),
             memory,
-            ip: 0x3000,
+            ip: orig,
             condition_code: ConditionCode::Zero,
             halted: false,
             jumped: false,
@@ -468,18 +470,8 @@ impl<'a> Machine<'a> {
     }
 
     pub fn step(&mut self) {
-        self.evaluate_at_ip();
-
-        // if this was not true, then evaluate changed our IP, and we should not change it ourselves.
-        if !self.jumped {
-            self.ip += 1;
-        } else {
-            self.jumped = false;
-        }
-    }
-
-    pub fn evaluate_at_ip(&mut self) {
         let instr = self.memory[self.ip as usize];
+        self.ip += 1; // ip points to the next instruction
         self.evaluate(Instruction(instr));
     }
 
@@ -609,18 +601,32 @@ impl<'a> Machine<'a> {
     }
 }
 
-fn main() {
-    let mut machine = Machine::new_std(
-        &[
-            Instruction::lea(Register::R0, 3), // r0 = text_addr
-            Instruction::trap_puts(), // print string stored at address in r0
-            Instruction::trap_halt(),
-        ],
-    );
+fn read_binary_file(file: &Path) -> Vec<Instruction> {
+    let mut res = Vec::new();
 
-    let text = "Hello, world!\n";
-    let text_addr = 0x3003;
-    machine.string_set(text_addr, text);
+    let mut file = File::open(file).unwrap();
+    loop {
+        let mut buf = [0u8; 2];
+        if let Err(err) = file.read_exact(&mut buf) {
+            break;
+        }
+        let instr = Instruction(((buf[0] as i16) << 8) | ((buf[1] as i16) & 0b11111111));
+        res.push(instr);
+    }
+
+    res
+}
+
+fn main() {
+    let binary = read_binary_file(&Path::new("hello.obj"));
+    let orig = binary[0].0;
+
+    let mut machine = Machine::new(
+        std::io::stdin(),
+        std::io::stdout(),
+        orig as u16,
+        &binary[1..]
+    );
 
     machine.run_until_halt();
 }
@@ -713,6 +719,7 @@ mod tests {
         let mut machine = Machine::new(
             std::io::stdin(),
             &mut output,
+            0x3000,
             &[
                 // largest immediate we can do is 7
                 // yes this can be condensed
@@ -745,7 +752,7 @@ mod tests {
     fn check_branching() {
         let mut machine = Machine::new_std(&[
             Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7 // flag = p
-            Instruction::branch(0b001, 2), // check if positive, then skip over the next instruction
+            Instruction::branch(0b001, 1), // check if positive, then skip over the next instruction
             Instruction::trap_halt(),
             Instruction::add_imm(Register::R0, Register::R0, 7), // r0 = 14
             Instruction::trap_halt(),
@@ -756,7 +763,7 @@ mod tests {
 
         let mut machine = Machine::new_std(&[
             Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7 // flag = p
-            Instruction::branch(0b110, 2), // check if negative or zero (false), so we don't jump
+            Instruction::branch(0b110, 1), // check if negative or zero (false), so we don't jump
             Instruction::trap_halt(),
             Instruction::add_imm(Register::R0, Register::R0, 7), // r0 = 14
             Instruction::trap_halt(),
@@ -771,7 +778,7 @@ mod tests {
 
         machine.step();
 
-        assert_eq!(machine.ip, 0x3000 - 1);
+        assert_eq!(machine.ip, 0x3000);
     }
 
     #[test]
@@ -791,7 +798,7 @@ mod tests {
     #[test]
     fn check_ld() {
         let mut machine = Machine::new_std(&[
-            Instruction::ld(Register::R0, -1), // r0 = 50 (see code after this)
+            Instruction::ld(Register::R0, -2), // r0 = 50 (see code after this)
             Instruction::trap_halt(),
         ]);
 
@@ -808,8 +815,9 @@ mod tests {
         let mut machine = Machine::new(
             std::io::stdin(),
             &mut output,
+            0x3000,
             &[
-                Instruction::lea(Register::R0, 3), // r0 = text_addr
+                Instruction::lea(Register::R0, 2), // r0 = text_addr
                 Instruction::trap_puts(), // print string stored at address in r0
                 Instruction::trap_halt(),
             ],
