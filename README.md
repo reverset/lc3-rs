@@ -16,8 +16,8 @@
 |     AND     |      ✅      |
 |     BR      |      ✅      |
 |     JMP     |      ✅      |
-|     JSR     |      ❌      |
-|    JSRR     |      ❌      |
+|     JSR     |      ✅      |
+|    JSRR     |      ✅      |
 |     LD      |      ✅      |
 |     LDI     |      ✅      |
 |     LDR     |      ✅      |
@@ -25,9 +25,9 @@
 |     NOT     |      ✅      |
 |     RET     |      ✅      |
 |     RTI     |      ❌      |
-|     ST      |      ❌      |
-|     STI     |      ❌      |
-|     STR     |      ❌      |
+|     ST      |      ✅      |
+|     STI     |      ✅      |
+|     STR     |      ✅      |
 |    TRAP     |      ✅      |
 |  reserved   |      ❌      |
 

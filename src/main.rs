@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::{Error, Read, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -40,7 +40,8 @@ fn i9_to_i16(x: i16) -> i16 {
     const MASK: i16 = 0b111111111;
     let val = x & MASK;
 
-    if val & 0b100000000 != 0 { // is negative
+    if val & 0b100000000 != 0 {
+        // is negative
         val | !MASK
     } else {
         val
@@ -51,7 +52,20 @@ fn i6_to_i8(x: i8) -> i8 {
     const MASK: i8 = 0b111111;
     let val = x & MASK;
 
-    if val & 0b100000 != 0 { // is negative
+    if val & 0b100000 != 0 {
+        // is negative
+        val | !MASK
+    } else {
+        val
+    }
+}
+
+fn i11_to_i16(x: i16) -> i16 {
+    const MASK: i16 = 0b11111111111;
+    let val = x & MASK;
+
+    if val & 0b10000000000 != 0 {
+        // is negative
         val | !MASK
     } else {
         val
@@ -64,6 +78,10 @@ fn check_i9_range(x: i16) {
 
 fn check_i6_range(x: i8) {
     assert!((-32..=31).contains(&x))
+}
+
+fn check_i11_range(x: i16) {
+    assert!((-1024..=1023).contains(&x))
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -177,10 +195,7 @@ impl Instruction {
     // returns flags and the ip offset separately.
     pub fn get_branch(&self) -> Option<(u8, i16)> {
         if self.check_header(0b0000) {
-            Some((
-                (((self.0 as u16) >> 9) & 0b111) as u8,
-                i9_to_i16(self.0),
-            ))
+            Some(((((self.0 as u16) >> 9) & 0b111) as u8, i9_to_i16(self.0)))
         } else {
             None
         }
@@ -203,9 +218,44 @@ impl Instruction {
         }
     }
 
-    // TODO
     // JSR 	0100 	1 	 PCoffset11
+    pub fn jsr(offset: i16) -> Self {
+        check_i11_range(offset);
+
+        let mut instr: i16 = 0b0100 << 12;
+
+        instr |= 1 << 11;
+        instr |= offset & 0b11111111111;
+
+        Instruction(instr)
+    }
+
+    pub fn get_jsr(&self) -> Option<i16> {
+        if self.check_header(0b0100) && (self.0 & 0b100000000000 != 0) {
+            Some(i11_to_i16(self.0))
+        } else {
+            None
+        }
+    }
+
     // JSRR	0100 	0 	 00 	BaseR 	000000
+    pub fn jsrr(baser: impl Into<u8>) -> Self {
+        let baser = baser.into();
+
+        assert!(baser < 8);
+        let mut instr: i16 = 0b0100 << 12;
+
+        instr |= (baser as i16 & 0b111) << 6;
+        Instruction(instr)
+    }
+
+    pub fn get_jsrr(&self) -> Option<u8> {
+        if self.check_header(0b0100) && (self.0 & 0b100000000000 == 0) {
+            Some(((self.0 >> 6) & 0b111) as u8)
+        } else {
+            None
+        }
+    }
 
     // LD  	0010 	DR 	 PCoffset9
     // OFFSET IS 9 BITS!!!!
@@ -276,7 +326,11 @@ impl Instruction {
 
     pub fn get_ldr(&self) -> Option<(u8, u8, i8)> {
         if self.check_header(0b0110) {
-            Some((((self.0 >> 9) & 0b111) as u8, ((self.0 >> 6) & 0b111) as u8, i6_to_i8(self.0 as i8)))
+            Some((
+                ((self.0 >> 9) & 0b111) as u8,
+                ((self.0 >> 6) & 0b111) as u8,
+                i6_to_i8(self.0 as i8),
+            ))
         } else {
             None
         }
@@ -299,12 +353,7 @@ impl Instruction {
 
     pub fn get_lea(&self) -> Option<(Register, i16)> {
         if self.check_header(0b1110) {
-            Some(
-                (
-                    (((self.0 >> 9) & 0b111) as u8).into(),
-                    i9_to_i16(self.0),
-                )
-            )
+            Some(((((self.0 >> 9) & 0b111) as u8).into(), i9_to_i16(self.0)))
         } else {
             None
         }
@@ -336,8 +385,73 @@ impl Instruction {
     }
 
     // ST 	0011 	SR 	 PCoffset9
+    pub fn st(sr: impl Into<u8>, offset: i16) -> Self {
+        let sr = sr.into();
+
+        assert!(sr < 8);
+        check_i9_range(offset);
+
+        let mut instr: i16 = 0b0011 << 12;
+        instr |= (sr as i16) << 9;
+        instr |= offset & 0b111111111;
+
+        Instruction(instr)
+    }
+
+    pub fn get_st(&self) -> Option<(u8, i16)> {
+        if self.check_header(0b0011) {
+            Some((((self.0 >> 9) & 0b111) as u8, i9_to_i16(self.0)))
+        } else {
+            None
+        }
+    }
+
     // STI 	1011 	SR 	 PCoffset9
+    pub fn sti(sr: impl Into<u8>, offset: i16) -> Self {
+        let sr = sr.into();
+
+        assert!(sr < 8);
+        check_i9_range(offset);
+
+        let mut instr: i16 = 0b1011 << 12;
+        instr |= (sr as i16) << 9;
+        instr |= offset & 0b111111111;
+
+        Instruction(instr)
+    }
+
+    pub fn get_sti(&self) -> Option<(u8, i16)> {
+        if self.check_header(0b1011) {
+            Some((((self.0 >> 9) & 0b111) as u8, i9_to_i16(self.0)))
+        } else {
+            None
+        }
+    }
+
     // STR 	0111 	SR 	 BaseR 	offset6
+    pub fn str(sr: impl Into<u8>, baser: impl Into<u8>, offset: i8) -> Self {
+        let sr = sr.into();
+        let baser = baser.into();
+
+        assert!(sr < 8);
+        assert!(baser < 8);
+        check_i6_range(offset);
+
+        let mut instr: i16 = 0b0111 << 12;
+        instr |= (sr as i16) << 9;
+        instr |= (baser as i16) << 6;
+        instr |= (offset as i16) & 0b111111;
+
+        Instruction(instr)
+    }
+
+    pub fn get_str(&self) -> Option<(u8, u8, i8)> {
+        if self.check_header(0b0111) {
+            Some((((self.0 >> 9) & 0b111) as u8, ((self.0 >> 6) & 0b111) as u8, i6_to_i8(self.0 as i8)))
+        } else {
+            None
+        }
+    }
 
     // TRAP	1111 	0000 trapvect8
     pub fn trap(vector: u8) -> Self {
@@ -419,7 +533,7 @@ impl Instruction {
 
     fn check_header(&self, header: u16) -> bool {
         // convert to unsigned, since shifting to the right with a negative number adds leading 1s.
-        ((self.0 as u16) >> 12) == header
+        (((self.0 as u16) >> 12) & 0b1111) == header
     }
 }
 
@@ -506,7 +620,12 @@ impl<'a> Machine<'a> {
         Self::new(std::io::stdin(), std::io::stdout(), 0x3000, instructions)
     }
 
-    pub fn new(read: impl Read + 'a, write: impl Write + 'a, orig: u16, instructions: &[Instruction]) -> Self {
+    pub fn new(
+        read: impl Read + 'a,
+        write: impl Write + 'a,
+        orig: u16,
+        instructions: &[Instruction],
+    ) -> Self {
         let mut memory = Vec::from_iter((0..orig).map(|_| 0)); // instructions start at 0x3000.
         for inst in instructions {
             memory.push(inst.0);
@@ -536,12 +655,10 @@ impl<'a> Machine<'a> {
     }
 
     pub fn set_span_at(&mut self, index: u16, value: &[i16]) {
-        let mut value_index = 0;
-        for i in (index as usize)..(index as usize + value.len()) {
+        for (value_index, i) in ((index as usize)..(index as usize + value.len())).enumerate() {
             self.ensure_memory_space_at(i);
 
             self.memory[i] = value[value_index];
-            value_index += 1;
         }
     }
 
@@ -576,9 +693,15 @@ impl<'a> Machine<'a> {
         } else if let Some(reg) = instr.get_jmp() {
             self.ip = self.registers.get(reg) as u16;
             self.jumped = true;
-        }
-        //...
-        else if let Some((dr, offset)) = instr.get_ld() {
+        } else if let Some(offset) = instr.get_jsr() {
+            *self.registers.get_mut(Register::R7) = self.ip as i16;
+            self.ip = ((self.ip as i32) + (offset as i32)) as u16;
+        } else if let Some(baser) = instr.get_jsrr() {
+            *self.registers.get_mut(Register::R7) = self.ip as i16;
+
+            let addr = self.registers.get(baser.into());
+            self.ip = addr as u16;
+        } else if let Some((dr, offset)) = instr.get_ld() {
             // cast to i32 so that subtraction can be done properly
             let value = self.memory[((self.ip as i32) + (offset as i32)) as usize];
             *self.registers.get_mut(dr.into()) = value;
@@ -598,16 +721,29 @@ impl<'a> Machine<'a> {
             self.set_condition_code_based_on(dr.into());
         } else if let Some((dr, offset)) = instr.get_lea() {
             let effective_addr = ((self.ip as i32) + (offset as i32)) as i16;
-            *self.registers.get_mut(dr.into()) = effective_addr;
+            *self.registers.get_mut(dr) = effective_addr;
 
-            self.set_condition_code_based_on(dr.into());
+            self.set_condition_code_based_on(dr);
         }
         // ...
         else if instr.is_not() {
             self.handle_not(instr);
         }
-        // ...
-        else if let Some(vec) = instr.get_trap_vector() {
+        // missing RTI
+        else if let Some((sr, offset)) = instr.get_st() {
+            let addr = ((self.ip as i32) + (offset as i32)) as u16;
+            self.memory[addr as usize] = self.registers.get(sr.into());
+            self.set_condition_code_based_on(sr.into());
+        } else if let Some((sr, offset)) = instr.get_sti() {
+            let addr = ((self.ip as i32) + (offset as i32)) as u16;
+            let addr = self.memory[addr as usize];
+            self.memory[addr as usize] = self.registers.get(sr.into());
+            self.set_condition_code_based_on(sr.into());
+        }  else if let Some((sr, baser, offset)) = instr.get_str() {
+            let addr = self.registers.get(baser.into()) + offset as i16;
+            self.memory[addr as usize] = self.registers.get(sr.into());
+            self.set_condition_code_based_on(sr.into());
+        } else if let Some(vec) = instr.get_trap_vector() {
             self.handle_trap(vec);
         }
     }
@@ -682,7 +818,7 @@ impl<'a> Machine<'a> {
                     self.ensure_memory_space_at(addr);
                 }
                 self.stdout.flush().expect("Failed to flush stdout");
-            },
+            }
             0x23 => todo!(),
             0x25 => {
                 self.halted = true;
@@ -706,7 +842,7 @@ fn read_binary_file(file: &Path) -> Vec<Instruction> {
     let mut file = File::open(file).unwrap();
     loop {
         let mut buf = [0u8; 2];
-        if let Err(err) = file.read_exact(&mut buf) {
+        if file.read_exact(&mut buf).is_err() {
             break;
         }
         let instr = Instruction(((buf[0] as i16) << 8) | ((buf[1] as i16) & 0b11111111));
@@ -717,14 +853,14 @@ fn read_binary_file(file: &Path) -> Vec<Instruction> {
 }
 
 fn main() {
-    let binary = read_binary_file(&Path::new("hello.obj"));
+    let binary = read_binary_file(Path::new("hello.obj"));
     let orig = binary[0].0;
 
     let mut machine = Machine::new(
         std::io::stdin(),
         std::io::stdout(),
         orig as u16,
-        &binary[1..]
+        &binary[1..],
     );
 
     machine.run_until_halt();
@@ -908,7 +1044,7 @@ mod tests {
     }
 
     #[test]
-    fn hello_world() { // TODO
+    fn hello_world() {
         let mut output = BufWriter::new(Vec::new());
 
         let mut machine = Machine::new(
@@ -917,7 +1053,7 @@ mod tests {
             0x3000,
             &[
                 Instruction::lea(Register::R0, 2), // r0 = text_addr
-                Instruction::trap_puts(), // print string stored at address in r0
+                Instruction::trap_puts(),          // print string stored at address in r0
                 Instruction::trap_halt(),
             ],
         );
@@ -930,7 +1066,10 @@ mod tests {
 
         drop(machine);
 
-        assert_eq!(String::from_utf8(output.into_inner().unwrap()).unwrap(), text);
+        assert_eq!(
+            String::from_utf8(output.into_inner().unwrap()).unwrap(),
+            text
+        );
     }
 
     #[test]
@@ -964,5 +1103,94 @@ mod tests {
         assert_eq!(machine.registers.get(Register::R1), 1);
         assert_eq!(machine.registers.get(Register::R2), 2);
         assert_eq!(machine.registers.get(Register::R3), 3);
+    }
+
+    #[test]
+    fn check_jsr() {
+        let mut machine = Machine::new_std(&[
+            Instruction::jsr(3),
+            Instruction::add_imm(Register::R5, Register::R0, 1),
+            Instruction::add_imm(Register::R5, Register::R0, 1),
+            Instruction::add_imm(Register::R5, Register::R0, 1),
+            Instruction::add_imm(Register::R0, Register::R1, 5),
+            Instruction::trap_halt(),
+        ]);
+
+        machine.run_until_halt();
+        println!("{:?}", machine.registers);
+
+        assert_eq!(machine.registers.get(Register::R0), 5);
+        assert_ne!(machine.registers.get(Register::R5), 3);
+        assert_eq!(machine.registers.get(Register::R7), 0x3001);
+    }
+
+    #[test]
+    fn check_jsrr() {
+        let mut machine = Machine::new_std(&[
+            Instruction::ld(Register::R1, -2),
+            Instruction::jsrr(Register::R1),
+            Instruction::add_imm(Register::R5, Register::R0, 1),
+            Instruction::add_imm(Register::R5, Register::R0, 1),
+            Instruction::add_imm(Register::R5, Register::R0, 1),
+            Instruction::add_imm(Register::R0, Register::R2, 5),
+            Instruction::trap_halt(),
+        ]);
+
+        machine.set_memory_at(0x3000 - 1, 0x3005);
+        machine.step();
+        machine.step();
+        machine.step();
+        // machine.run_until_halt();
+
+        assert_eq!(machine.registers.get(Register::R0), 5);
+        assert_ne!(machine.registers.get(Register::R5), 3);
+        assert_eq!(machine.registers.get(Register::R7), 0x3002);
+    }
+
+    #[test]
+    fn check_st() {
+        let mut machine = Machine::new_std(&[
+            Instruction::add_imm(Register::R0, Register::R1, 5),
+            Instruction::st(Register::R0, -3),
+            Instruction::trap_halt(),
+        ]);
+
+        machine.run_until_halt();
+
+        assert_eq!(machine.memory[0x3000 - 1], 5);
+    }
+
+    #[test]
+    fn check_sti() {
+        let mut machine = Machine::new_std(&[
+            Instruction::add_imm(Register::R0, Register::R1, 5),
+            Instruction::sti(Register::R0, -3),
+            Instruction::trap_halt(),
+        ]);
+
+        machine.set_memory_at(0x3000 - 1, 0x2000);
+
+        machine.run_until_halt();
+
+        assert_eq!(machine.memory[0x2000], 5);
+    }
+
+    #[test]
+    fn check_str() {
+        let mut machine = Machine::new_std(&[
+            Instruction::ld(Register::R0, -2),
+            Instruction::add_imm(Register::R1, Register::R5, 5),
+            Instruction::add_imm(Register::R2, Register::R5, 6),
+            Instruction::str(Register::R1, Register::R0, 0),
+            Instruction::str(Register::R2, Register::R0, 1),
+            Instruction::trap_halt(),
+        ]);
+
+        machine.set_memory_at(0x3000 - 1, 0x2000);
+
+        machine.run_until_halt();
+
+        assert_eq!(machine.memory[0x2000], 5);
+        assert_eq!(machine.memory[0x2001], 6);
     }
 }
