@@ -47,8 +47,23 @@ fn i9_to_i16(x: i16) -> i16 {
     }
 }
 
+fn i6_to_i8(x: i8) -> i8 {
+    const MASK: i8 = 0b111111;
+    let val = x & MASK;
+
+    if val & 0b100000 != 0 { // is negative
+        val | !MASK
+    } else {
+        val
+    }
+}
+
 fn check_i9_range(x: i16) {
     assert!((-256..=255).contains(&x));
+}
+
+fn check_i6_range(x: i8) {
+    assert!((-32..=31).contains(&x))
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -216,9 +231,56 @@ impl Instruction {
         }
     }
 
-    // TODO
     // LDI 	1010 	DR 	 PCoffset9
+    pub fn ldi(dr: impl Into<u8>, ip_offset: i16) -> Self {
+        let dr = dr.into();
+
+        assert!(dr < 8);
+        check_i9_range(ip_offset);
+
+        let mut instr: i16 = 0b1010 << 12;
+
+        instr |= (dr as i16) << 9;
+        instr |= ip_offset & 0b111111111;
+
+        Instruction(instr)
+    }
+
+    pub fn get_ldi(&self) -> Option<(u8, i16)> {
+        if self.check_header(0b1010) {
+            Some(((((self.0) >> 9) & 0b111) as u8, i9_to_i16(self.0)))
+        } else {
+            None
+        }
+    }
+
     // LDR 	0110 	DR 	 BaseR 	offset6
+    // offset is an i6
+    pub fn ldr(dr: impl Into<u8>, baser: impl Into<u8>, offset: i8) -> Self {
+        let dr = dr.into();
+        let baser = baser.into();
+
+        assert!(dr < 8);
+        assert!(baser < 8);
+
+        check_i6_range(offset);
+
+        let mut instr: i16 = 0b0110 << 12;
+
+        instr |= (dr as i16) << 9;
+        instr |= (baser as i16) << 6;
+        instr |= (offset as i16) & 0b111111;
+
+        Instruction(instr)
+    }
+
+    pub fn get_ldr(&self) -> Option<(u8, u8, i8)> {
+        if self.check_header(0b0110) {
+            Some((((self.0 >> 9) & 0b111) as u8, ((self.0 >> 6) & 0b111) as u8, i6_to_i8(self.0 as i8)))
+        } else {
+            None
+        }
+    }
 
     // LEA 	1110 	DR 	 PCoffset9
     pub fn lea(dr: impl Into<u8>, ip_offset: i16) -> Self {
@@ -269,6 +331,10 @@ impl Instruction {
     }
 
     // RET 	1100 	000  111 	000000
+    pub fn ret() -> Self {
+        Self::jmp(Register::R7)
+    }
+
     // ST 	0011 	SR 	 PCoffset9
     // STI 	1011 	SR 	 PCoffset9
     // STR 	0111 	SR 	 BaseR 	offset6
@@ -495,6 +561,7 @@ impl<'a> Machine<'a> {
         self.evaluate(Instruction(instr));
     }
 
+    // cleanup needed
     pub fn evaluate(&mut self, instr: Instruction) {
         if instr.is_add() {
             self.handle_add(instr);
@@ -517,11 +584,23 @@ impl<'a> Machine<'a> {
             *self.registers.get_mut(dr.into()) = value;
 
             self.set_condition_code_based_on(dr.into());
-        }
-        // ...
-        else if let Some((dr, offset)) = instr.get_lea() {
+        } else if let Some((dr, offset)) = instr.get_ldi() {
+            let addr = self.memory[((self.ip as i32) + (offset as i32)) as usize];
+            let value = self.memory[addr as usize];
+            *self.registers.get_mut(dr.into()) = value;
+
+            self.set_condition_code_based_on(dr.into());
+        } else if let Some((dr, baser, offset)) = instr.get_ldr() {
+            let addr = self.registers.get(baser.into()) + offset as i16;
+            let value = self.memory[addr as usize];
+            *self.registers.get_mut(dr.into()) = value;
+
+            self.set_condition_code_based_on(dr.into());
+        } else if let Some((dr, offset)) = instr.get_lea() {
             let effective_addr = ((self.ip as i32) + (offset as i32)) as i16;
             *self.registers.get_mut(dr.into()) = effective_addr;
+
+            self.set_condition_code_based_on(dr.into());
         }
         // ...
         else if instr.is_not() {
@@ -852,5 +931,38 @@ mod tests {
         drop(machine);
 
         assert_eq!(String::from_utf8(output.into_inner().unwrap()).unwrap(), text);
+    }
+
+    #[test]
+    fn check_ldi() {
+        let mut machine = Machine::new_std(&[
+            Instruction::ldi(Register::R0, -2), // r0 = 20 (load value stored at the address stored in ip offset -2)
+            Instruction::trap_halt(),
+        ]);
+
+        machine.set_memory_at(1, 20);
+        machine.set_memory_at(0x3000 - 1, 1);
+        machine.run_until_halt();
+
+        assert_eq!(machine.registers.get(Register::R0), 20);
+    }
+
+    #[test]
+    fn check_ldr() {
+        let mut machine = Machine::new_std(&[
+            Instruction::ld(Register::R0, -2),
+            Instruction::ldr(Register::R1, Register::R0, 0),
+            Instruction::ldr(Register::R2, Register::R0, 1),
+            Instruction::ldr(Register::R3, Register::R0, 2),
+            Instruction::trap_halt(),
+        ]);
+
+        machine.set_memory_at(0x3000 - 1, 10);
+        machine.set_span_at(10, &[1, 2, 3]);
+        machine.run_until_halt();
+
+        assert_eq!(machine.registers.get(Register::R1), 1);
+        assert_eq!(machine.registers.get(Register::R2), 2);
+        assert_eq!(machine.registers.get(Register::R3), 3);
     }
 }
