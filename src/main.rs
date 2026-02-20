@@ -72,12 +72,28 @@ fn i11_to_i16(x: i16) -> i16 {
     }
 }
 
+fn i5_to_i8(x: i8) -> i8 {
+    const MASK: i8 = 0b11111;
+    let val = x & MASK;
+
+    if val & 0b10000 != 0 {
+        // is negative
+        val | !MASK
+    } else {
+        val
+    }
+}
+
 fn check_i9_range(x: i16) {
     assert!((-256..=255).contains(&x));
 }
 
 fn check_i6_range(x: i8) {
     assert!((-32..=31).contains(&x))
+}
+
+fn check_i5_range(x: i8) {
+    assert!((-8..=7).contains(&x))
 }
 
 fn check_i11_range(x: i16) {
@@ -111,13 +127,15 @@ impl Instruction {
     }
 
     // imm must only use up to 5 bits
+    // 15-12  11-9  8-6     4-0
+    // 0001    DR   SR1  1  Imm5
     pub fn add_imm(dr: impl Into<u8>, sr1: impl Into<u8>, imm: i8) -> Self {
         let dr = dr.into();
         let sr1 = sr1.into();
 
-        assert!(dr < 8 && sr1 < 8 && (-8..=7).contains(&imm));
-        // 15-12  11-9  8-6     4-0
-        // 0001    DR   SR1  1  Imm5
+        assert!(dr < 8);
+        assert!(sr1 < 8);
+        check_i5_range(imm);
 
         let mut instr: i16 = 1 << 12;
 
@@ -126,7 +144,7 @@ impl Instruction {
 
         instr |= 1 << 5;
 
-        instr |= Self::convert_immediate_byte_to_nybble(imm) as i16;
+        instr |= (imm & 0b11111) as i16;
 
         Instruction(instr)
     }
@@ -161,7 +179,9 @@ impl Instruction {
         let dr = dr.into();
         let sr1 = sr1.into();
 
-        assert!(dr < 8 && sr1 < 8 && (-8..=7).contains(&imm));
+        assert!(dr < 8);
+        assert!(sr1 < 8);
+        check_i5_range(imm);
 
         let mut instr: i16 = 0b0101 << 12;
 
@@ -170,7 +190,7 @@ impl Instruction {
 
         instr |= 1 << 5;
 
-        instr |= Self::convert_immediate_byte_to_nybble(imm) as i16;
+        instr |= (imm & 0b11111) as i16;
 
         Instruction(instr)
     }
@@ -447,7 +467,11 @@ impl Instruction {
 
     pub fn get_str(&self) -> Option<(u8, u8, i8)> {
         if self.check_header(0b0111) {
-            Some((((self.0 >> 9) & 0b111) as u8, ((self.0 >> 6) & 0b111) as u8, i6_to_i8(self.0 as i8)))
+            Some((
+                ((self.0 >> 9) & 0b111) as u8,
+                ((self.0 >> 6) & 0b111) as u8,
+                i6_to_i8(self.0 as i8),
+            ))
         } else {
             None
         }
@@ -494,17 +518,7 @@ impl Instruction {
 
     // reserved 1101
 
-    // a nybble is a 4-bit number.
-    fn convert_immediate_byte_to_nybble(imm: i8) -> u8 {
-        let mut value = (imm as u8) & 0b00000111; // mask first 3 bits
-
-        if imm < 0 {
-            value |= 0b00001000; // set 4th bit to 1
-        }
-
-        value
-    }
-
+    // TODO: refactor these to use the Option approach like the others
     fn get_dr_sr1_sr2(&self) -> (u8, u8, u8) {
         // & to mask out the rest of the bits
         // no need to convert to u16 here since we mask out the extra bits anyway
@@ -515,11 +529,11 @@ impl Instruction {
         )
     }
 
-    fn get_dr_sr1_imm5(&self) -> (u8, u8, u8) {
+    fn get_dr_sr1_imm5(&self) -> (u8, u8, i8) {
         (
             ((self.0 >> 9) & 0b111) as u8,
             ((self.0 >> 6) & 0b111) as u8,
-            (self.0 & 0b11111) as u8,
+            i5_to_i8((self.0 as u16) as i8),
         )
     }
 
@@ -644,6 +658,7 @@ impl<'a> Machine<'a> {
     }
 
     pub fn set_memory_at(&mut self, index: u16, value: i16) {
+        self.ensure_memory_space_at(index as usize);
         self.memory[index as usize] = value;
     }
 
@@ -739,7 +754,7 @@ impl<'a> Machine<'a> {
             let addr = self.memory[addr as usize];
             self.memory[addr as usize] = self.registers.get(sr.into());
             self.set_condition_code_based_on(sr.into());
-        }  else if let Some((sr, baser, offset)) = instr.get_str() {
+        } else if let Some((sr, baser, offset)) = instr.get_str() {
             let addr = self.registers.get(baser.into()) + offset as i16;
             self.memory[addr as usize] = self.registers.get(sr.into());
             self.set_condition_code_based_on(sr.into());
@@ -853,17 +868,40 @@ fn read_binary_file(file: &Path) -> Vec<Instruction> {
 }
 
 fn main() {
-    let binary = read_binary_file(Path::new("hello.obj"));
-    let orig = binary[0].0;
+        // maybe use clap or something ...
 
-    let mut machine = Machine::new(
-        std::io::stdin(),
-        std::io::stdout(),
-        orig as u16,
-        &binary[1..],
-    );
+        let args: Vec<String> = std::env::args().collect();
 
-    machine.run_until_halt();
+        // probably a better way to do this
+        let args_ref = args.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
+
+        match args_ref[..] {
+            [_, "run"] => {
+                println!("Please enter path of binary file");
+            }
+            [_, "run", path] => {
+                let binary = read_binary_file(Path::new(path));
+
+                let orig = binary[0].0;
+
+                let mut machine = Machine::new(
+                    std::io::stdin(),
+                    std::io::stdout(),
+                    orig as u16,
+                    &binary[1..],
+                );
+
+                machine.run_until_halt();
+            }
+
+            _ => {
+                println!("
+    lc3-rs help
+    Subcommands:
+        run <path>\t\t\t Run a assembled binary file for the LC-3.
+                ");
+            }
+        }
 }
 
 #[cfg(test)]
@@ -1192,5 +1230,34 @@ mod tests {
 
         assert_eq!(machine.memory[0x2000], 5);
         assert_eq!(machine.memory[0x2001], 6);
+    }
+
+    #[test]
+    fn hello_world_5() {
+        // adapted from https://github.com/paul-nameless/lc3-asm/blob/master/tests/hello2.asm
+        let mut output = BufWriter::new(Vec::new());
+
+        let mut machine = Machine::new(
+            std::io::stdin(),
+            &mut output,
+            0x3000,
+            &[
+                Instruction::lea(Register::R0, 5),
+                Instruction::ld(Register::R1, 19),
+                Instruction::trap_puts(),
+                Instruction::add_imm(Register::R1, Register::R1, -1),
+                Instruction::branch(0b001, -3),
+                Instruction::trap_halt(),
+            ],
+        );
+
+        let text = "Hello, World!\n";
+        machine.string_set(0x3006, text);
+        machine.set_memory_at(1 + 0x3006 + (text.len() as u16), 5); // 1 + ... because of null byte
+
+        machine.run_until_halt();
+        drop(machine);
+
+        assert_eq!(String::from_utf8(output.into_inner().unwrap()).unwrap(), text.repeat(5));
     }
 }

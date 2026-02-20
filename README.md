@@ -1,5 +1,13 @@
 # LC-3-_rs_
 
+## Features
+| Feature         | Info                                |
+|-----------------|-------------------------------------|
+| Virtual Machine | [Mostly implemented](#instructions) |
+| Assember        | soon ™️                             |
+| Disassembler    | soon ™️                             |
+| C Compiler      | soon ™️                             |
+
 ## References
 - https://www.jmeiners.com/lc3-vm/supplies/lc3-isa.pdf (best source)
 
