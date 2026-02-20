@@ -36,6 +36,21 @@ fn convert_str_to_i16_vec(str: &str) -> Vec<i16> {
     res
 }
 
+fn i9_to_i16(x: i16) -> i16 {
+    const MASK: i16 = 0b111111111;
+    let val = x & MASK;
+
+    if val & 0b100000000 != 0 { // is negative
+        val | !MASK
+    } else {
+        val
+    }
+}
+
+fn check_i9_range(x: i16) {
+    assert!((-256..=255).contains(&x));
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Instruction(pub i16);
 
@@ -133,22 +148,23 @@ impl Instruction {
 
     // BR 	0000 	n 	z	p 	PCoffset9
     // flags should use only 3 bits, each representing a condition code
-    pub fn branch(flags: u8, ip_offset: i8) -> Self {
+    pub fn branch(flags: u8, ip_offset: i16) -> Self {
         assert!(flags < 8);
+        check_i9_range(ip_offset);
 
         let mut instr: i16 = ((flags & 0b111) as i16) << 9;
 
-        instr |= (ip_offset as i16) & 0b11111111;
+        instr |= ip_offset & 0b111111111;
 
         Instruction(instr)
     }
 
     // returns flags and the ip offset separately.
-    pub fn get_branch(&self) -> Option<(u8, i8)> {
+    pub fn get_branch(&self) -> Option<(u8, i16)> {
         if self.check_header(0b0000) {
             Some((
                 (((self.0 as u16) >> 9) & 0b111) as u8,
-                (self.0 & 0b11111111) as i8,
+                i9_to_i16(self.0),
             ))
         } else {
             None
@@ -177,22 +193,24 @@ impl Instruction {
     // JSRR	0100 	0 	 00 	BaseR 	000000
 
     // LD  	0010 	DR 	 PCoffset9
-    pub fn ld(dr: impl Into<u8>, ip_offset: i8) -> Self {
+    // OFFSET IS 9 BITS!!!!
+    pub fn ld(dr: impl Into<u8>, ip_offset: i16) -> Self {
         let dr = dr.into();
 
         assert!(dr < 8);
+        check_i9_range(ip_offset);
 
         let mut instr: i16 = 0b0010 << 12;
 
         instr |= (dr as i16) << 9;
-        instr |= (ip_offset as i16) & 0b111111111; // casting from i8 to i16 adds leading 1s
+        instr |= ip_offset & 0b111111111;
 
         Instruction(instr)
     }
 
-    pub fn get_ld(&self) -> Option<(u8, i8)> {
+    pub fn get_ld(&self) -> Option<(u8, i16)> {
         if self.check_header(0b0010) {
-            Some((((self.0 >> 9) & 0b111) as u8, (self.0 & 0b11111111) as i8))
+            Some((((self.0 >> 9) & 0b111) as u8, i9_to_i16(self.0)))
         } else {
             None
         }
@@ -203,24 +221,26 @@ impl Instruction {
     // LDR 	0110 	DR 	 BaseR 	offset6
 
     // LEA 	1110 	DR 	 PCoffset9
-    pub fn lea(dr: impl Into<u8>, ip_offset: i8) -> Self {
+    pub fn lea(dr: impl Into<u8>, ip_offset: i16) -> Self {
         let dr = dr.into();
+
         assert!(dr < 8);
+        check_i9_range(ip_offset);
 
         let mut instr: i16 = 0b1110 << 12;
 
         instr |= (dr as i16) << 9;
-        instr |= (ip_offset as i16) & 0b11111111;
+        instr |= ip_offset & 0b111111111;
 
         Instruction(instr)
     }
 
-    pub fn get_lea(&self) -> Option<(Register, i8)> {
+    pub fn get_lea(&self) -> Option<(Register, i16)> {
         if self.check_header(0b1110) {
             Some(
                 (
                     (((self.0 >> 9) & 0b111) as u8).into(),
-                    (self.0 & 0b11111111) as i8,
+                    i9_to_i16(self.0),
                 )
             )
         } else {
