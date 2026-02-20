@@ -4,7 +4,7 @@
 | Feature         | Info                                |
 |-----------------|-------------------------------------|
 | Virtual Machine | [Mostly implemented](#instructions) |
-| Assember        | soon ™️                             |
+| Assembler       | soon ™️                             |
 | Disassembler    | soon ™️                             |
 | C Compiler      | soon ™️                             |
 
@@ -40,7 +40,7 @@
 |  reserved   |      ❌      |
 
 # Missing features
-- Interrupts
+- Interrupts & privileged flag
 - Device register assignments, namely:
   - 0xFE00 Keyboard status
   - 0xFE02 Keyboard data
