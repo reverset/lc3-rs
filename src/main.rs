@@ -199,7 +199,33 @@ impl Instruction {
     // TODO
     // LDI 	1010 	DR 	 PCoffset9
     // LDR 	0110 	DR 	 BaseR 	offset6
+
     // LEA 	1110 	DR 	 PCoffset9
+    pub fn lea(dr: impl Into<u8>, ip_offset: i8) -> Self {
+        let dr = dr.into();
+        assert!(dr < 8);
+
+        let mut instr: i16 = 0b1110 << 12;
+
+        instr |= (dr as i16) << 9;
+        instr |= (ip_offset as i16) & 0b11111111;
+
+        Instruction(instr)
+    }
+
+    pub fn get_lea(&self) -> Option<(Register, i8)> {
+        if self.check_header(0b1110) {
+            Some(
+                (
+                    (((self.0 >> 9) & 0b111) as u8).into(),
+                    (self.0 & 0b11111111) as i8,
+                )
+            )
+        } else {
+            None
+        }
+    }
+
     // NOT 	1001 	DR 	 SR 	111111
     pub fn not(dr: impl Into<u8>, sr: impl Into<u8>) -> Self {
         let dr = dr.into();
@@ -380,7 +406,7 @@ pub struct Machine<'a> {
     halted: bool,
     jumped: bool,
 
-    stdin: Box<dyn Read + 'a>,
+    _stdin: Box<dyn Read + 'a>,
     stdout: Box<dyn Write + 'a>,
 }
 
@@ -405,7 +431,7 @@ impl<'a> Machine<'a> {
             condition_code: ConditionCode::Zero,
             halted: false,
             jumped: false,
-            stdin: Box::new(read),
+            _stdin: Box::new(read),
             stdout: Box::new(write),
         }
     }
@@ -414,12 +440,25 @@ impl<'a> Machine<'a> {
         self.memory[index as usize] = value;
     }
 
+    // maybe check if length is greater than the max of an i16?
+    pub fn ensure_memory_space_at(&mut self, index: usize) {
+        if index >= self.memory.len() {
+            self.memory.resize(index + 1, 0);
+        }
+    }
+
     pub fn set_span_at(&mut self, index: u16, value: &[i16]) {
         let mut value_index = 0;
-        for i in (index as usize)..value.len() {
+        for i in (index as usize)..(index as usize + value.len()) {
+            self.ensure_memory_space_at(i);
+
             self.memory[i] = value[value_index];
             value_index += 1;
         }
+    }
+
+    pub fn string_set(&mut self, index: u16, value: &str) {
+        self.set_span_at(index, &convert_str_to_i16_vec(value));
     }
 
     pub fn run_until_halt(&mut self) {
@@ -464,6 +503,13 @@ impl<'a> Machine<'a> {
             // cast to i32 so that subtraction can be done properly
             let value = self.memory[((self.ip as i32) + (offset as i32)) as usize];
             *self.registers.get_mut(dr.into()) = value;
+
+            self.set_condition_code_based_on(dr.into());
+        }
+        // ...
+        else if let Some((dr, offset)) = instr.get_lea() {
+            let effective_addr = ((self.ip as i32) + (offset as i32)) as i16;
+            *self.registers.get_mut(dr.into()) = effective_addr;
         }
         // ...
         else if instr.is_not() {
@@ -534,12 +580,15 @@ impl<'a> Machine<'a> {
             }
             0x22 => {
                 let mut addr = self.registers.get(Register::R0) as usize;
+                self.ensure_memory_space_at(addr);
+
                 while self.memory[addr] != 0 {
                     self.stdout
                         .write_all(&[self.memory[addr] as u8])
                         .expect("Failed to write to stdout");
 
                     addr += 1;
+                    self.ensure_memory_space_at(addr);
                 }
                 self.stdout.flush().expect("Failed to flush stdout");
             },
@@ -561,23 +610,19 @@ impl<'a> Machine<'a> {
 }
 
 fn main() {
-    let mut machine = Machine::new_std(&[
-        Instruction::ld(Register::R0, -1), // r0 = 65
-        Instruction::ld(Register::R1, -3), // r1 = 90
-        Instruction::not(Register::R1, Register::R1), // r1 = -90
-        Instruction::trap_out(),
-        Instruction::add_imm(Register::R0, Register::R0, 1), // r0 = r0 + 1
-        Instruction::add(Register::R2, Register::R1, Register::R0), // r2 = r1 + r0
-        Instruction::branch(0b100, -3),
-        Instruction::trap_halt(), // this should not happen since we jumped over it
-    ]);
+    let mut machine = Machine::new_std(
+        &[
+            Instruction::lea(Register::R0, 3), // r0 = text_addr
+            Instruction::trap_puts(), // print string stored at address in r0
+            Instruction::trap_halt(),
+        ],
+    );
 
-    machine.set_memory_at(0x3000 - 1, 65);
-    machine.set_memory_at(0x3000 - 2, 90);
+    let text = "Hello, world!\n";
+    let text_addr = 0x3003;
+    machine.string_set(text_addr, text);
 
     machine.run_until_halt();
-
-    println!("\n{:?}", machine.registers);
 }
 
 #[cfg(test)]
@@ -756,22 +801,28 @@ mod tests {
         assert_eq!(machine.registers.get(Register::R0), 50);
     }
 
-    // #[test]
-    // fn hello_world() { // TODO
-    //     let mut output = BufWriter::new(Vec::new());
-    //
-    //     let mut machine = Machine::new(
-    //         std::io::stdin(),
-    //         &mut output,
-    //         &[
-    //             Instruction::ld(Register::R0, -1),
-    //             Instruction::trap_halt(),
-    //         ],
-    //     );
-    //
-    //     let text = "Hello, world!";
-    //     machine.set_span_at(0x3000 - text.len() as u16 - 1, &convert_str_to_i16_vec(text));
-    //
-    //     machine.run_until_halt();
-    // }
+    #[test]
+    fn hello_world() { // TODO
+        let mut output = BufWriter::new(Vec::new());
+
+        let mut machine = Machine::new(
+            std::io::stdin(),
+            &mut output,
+            &[
+                Instruction::lea(Register::R0, 3), // r0 = text_addr
+                Instruction::trap_puts(), // print string stored at address in r0
+                Instruction::trap_halt(),
+            ],
+        );
+
+        let text = "Hello, world!\n";
+        let text_addr = 0x3003;
+        machine.string_set(text_addr, text);
+
+        machine.run_until_halt();
+
+        drop(machine);
+
+        assert_eq!(String::from_utf8(output.into_inner().unwrap()).unwrap(), text);
+    }
 }
