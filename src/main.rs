@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Read, Write};
+use std::ops::{Index, IndexMut};
 use std::path::Path;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -613,9 +614,46 @@ impl ConditionCode {
     }
 }
 
+pub struct Memory(Vec<i16>);
+
+impl Memory {
+    pub fn resize(&mut self, size: usize, val: i16) {
+        self.0.resize(size, val);
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn ensure_space(&mut self, index: u16) {
+        if index as usize >= self.len() {
+            self.resize(index as usize + 1, 0);
+        }
+    }
+}
+
+impl Index<u16> for Memory {
+    type Output = i16;
+
+    fn index(&self, index: u16) -> &Self::Output {
+        if index as usize >= self.len() {
+            &0
+        } else {
+            self.0.index(index as usize)
+        }
+    }
+}
+
+impl IndexMut<u16> for Memory {
+    fn index_mut(&mut self, index: u16) -> &mut Self::Output {
+        self.ensure_space(index);
+        &mut self.0[index as usize]
+    }
+}
+
 pub struct Machine<'a> {
     registers: Registers,
-    memory: Vec<i16>,
+    memory: Memory,
     ip: u16, // LC-3 is word addressable.
     condition_code: ConditionCode,
 
@@ -647,7 +685,7 @@ impl<'a> Machine<'a> {
 
         Self {
             registers: Registers::default(),
-            memory,
+            memory: Memory(memory),
             ip: orig,
             condition_code: ConditionCode::Zero,
             halted: false,
@@ -658,21 +696,11 @@ impl<'a> Machine<'a> {
     }
 
     pub fn set_memory_at(&mut self, index: u16, value: i16) {
-        self.ensure_memory_space_at(index as usize);
-        self.memory[index as usize] = value;
-    }
-
-    // maybe check if length is greater than the max of an i16?
-    pub fn ensure_memory_space_at(&mut self, index: usize) {
-        if index >= self.memory.len() {
-            self.memory.resize(index + 1, 0);
-        }
+        self.memory[index] = value;
     }
 
     pub fn set_span_at(&mut self, index: u16, value: &[i16]) {
-        for (value_index, i) in ((index as usize)..(index as usize + value.len())).enumerate() {
-            self.ensure_memory_space_at(i);
-
+        for (value_index, i) in (index..(index + value.len() as u16)).enumerate() {
             self.memory[i] = value[value_index];
         }
     }
@@ -688,7 +716,7 @@ impl<'a> Machine<'a> {
     }
 
     pub fn step(&mut self) {
-        let instr = self.memory[self.ip as usize];
+        let instr = self.memory[self.ip];
         self.ip += 1; // ip points to the next instruction
         self.evaluate(Instruction(instr));
     }
@@ -718,19 +746,19 @@ impl<'a> Machine<'a> {
             self.ip = addr as u16;
         } else if let Some((dr, offset)) = instr.get_ld() {
             // cast to i32 so that subtraction can be done properly
-            let value = self.memory[((self.ip as i32) + (offset as i32)) as usize];
+            let value = self.memory[((self.ip as i32) + (offset as i32)) as u16];
             *self.registers.get_mut(dr.into()) = value;
 
             self.set_condition_code_based_on(dr.into());
         } else if let Some((dr, offset)) = instr.get_ldi() {
-            let addr = self.memory[((self.ip as i32) + (offset as i32)) as usize];
-            let value = self.memory[addr as usize];
+            let addr = self.memory[((self.ip as i32) + (offset as i32)) as u16];
+            let value = self.memory[addr as u16];
             *self.registers.get_mut(dr.into()) = value;
 
             self.set_condition_code_based_on(dr.into());
         } else if let Some((dr, baser, offset)) = instr.get_ldr() {
             let addr = self.registers.get(baser.into()) + offset as i16;
-            let value = self.memory[addr as usize];
+            let value = self.memory[addr as u16];
             *self.registers.get_mut(dr.into()) = value;
 
             self.set_condition_code_based_on(dr.into());
@@ -747,16 +775,16 @@ impl<'a> Machine<'a> {
         // missing RTI
         else if let Some((sr, offset)) = instr.get_st() {
             let addr = ((self.ip as i32) + (offset as i32)) as u16;
-            self.memory[addr as usize] = self.registers.get(sr.into());
+            self.memory[addr] = self.registers.get(sr.into());
             self.set_condition_code_based_on(sr.into());
         } else if let Some((sr, offset)) = instr.get_sti() {
             let addr = ((self.ip as i32) + (offset as i32)) as u16;
-            let addr = self.memory[addr as usize];
-            self.memory[addr as usize] = self.registers.get(sr.into());
+            let addr = self.memory[addr];
+            self.memory[addr as u16] = self.registers.get(sr.into());
             self.set_condition_code_based_on(sr.into());
         } else if let Some((sr, baser, offset)) = instr.get_str() {
             let addr = self.registers.get(baser.into()) + offset as i16;
-            self.memory[addr as usize] = self.registers.get(sr.into());
+            self.memory[addr as u16] = self.registers.get(sr.into());
             self.set_condition_code_based_on(sr.into());
         } else if let Some(vec) = instr.get_trap_vector() {
             self.handle_trap(vec);
@@ -821,8 +849,7 @@ impl<'a> Machine<'a> {
                     .expect("Failed to write to stdout");
             }
             0x22 => {
-                let mut addr = self.registers.get(Register::R0) as usize;
-                self.ensure_memory_space_at(addr);
+                let mut addr = self.registers.get(Register::R0) as u16;
 
                 while self.memory[addr] != 0 {
                     self.stdout
@@ -830,7 +857,6 @@ impl<'a> Machine<'a> {
                         .expect("Failed to write to stdout");
 
                     addr += 1;
-                    self.ensure_memory_space_at(addr);
                 }
                 self.stdout.flush().expect("Failed to flush stdout");
             }
