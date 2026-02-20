@@ -39,4 +39,8 @@
 |    TRAP     |      ✅      |
 |  reserved   |      ❌      |
 
-
+# Missing features
+- Interrupts
+- Device register assignments, namely:
+  - 0xFE00 Keyboard status
+  - 0xFE02 Keyboard data

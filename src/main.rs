@@ -660,7 +660,7 @@ pub struct Machine<'a> {
     halted: bool,
     jumped: bool,
 
-    _stdin: Box<dyn Read + 'a>,
+    stdin: Box<dyn Read + 'a>,
     stdout: Box<dyn Write + 'a>,
 }
 
@@ -690,7 +690,7 @@ impl<'a> Machine<'a> {
             condition_code: ConditionCode::Zero,
             halted: false,
             jumped: false,
-            _stdin: Box::new(read),
+            stdin: Box::new(read),
             stdout: Box::new(write),
         }
     }
@@ -841,13 +841,21 @@ impl<'a> Machine<'a> {
 
     fn handle_trap(&mut self, vec: u8) {
         match vec {
-            0x20 => todo!(),
+            // getc
+            0x20 => {
+                let mut buf = [0u8; 1]; // only reads 1 ASCII char (7-bits)
+                self.stdin.read_exact(&mut buf).expect("failed to read stdin");
+
+                *self.registers.get_mut(Register::R0) = buf[0] as i16;
+            }
+            // out
             0x21 => {
                 let r0 = self.registers.get(Register::R0);
                 self.stdout
                     .write_all(&[r0 as u8])
                     .expect("Failed to write to stdout");
             }
+            // puts
             0x22 => {
                 let mut addr = self.registers.get(Register::R0) as u16;
 
@@ -860,7 +868,11 @@ impl<'a> Machine<'a> {
                 }
                 self.stdout.flush().expect("Failed to flush stdout");
             }
+            // in
             0x23 => todo!(),
+            // 0x24 putsp refer to ISA TODO
+
+            // halt
             0x25 => {
                 self.halted = true;
             }
@@ -933,7 +945,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::BufWriter;
+    use std::io::{BufReader, BufWriter};
 
     #[test]
     fn add_instr() {
@@ -1285,5 +1297,25 @@ mod tests {
         drop(machine);
 
         assert_eq!(String::from_utf8(output.into_inner().unwrap()).unwrap(), text.repeat(5));
+    }
+
+    #[test]
+    fn test_getc() {
+        let data = [0b0000111u8; 1];
+        let input = BufReader::new(&data[..]);
+
+        let mut machine = Machine::new(
+            input,
+            std::io::stdout(),
+            0x3000,
+            &[
+                Instruction::trap_get_c(),
+                Instruction::trap_halt(),
+            ],
+        );
+
+        machine.run_until_halt();
+
+        assert_eq!(machine.registers.get(Register::R0), 0b0000111);
     }
 }
