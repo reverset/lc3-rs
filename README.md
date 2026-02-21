@@ -37,7 +37,9 @@
 |     STI     |      ✅      |
 |     STR     |      ✅      |
 |    TRAP     |      ✅      |
-|  reserved   |      ❌      |
+|  *reserved  |      ❌      |
+
+* reserved causes an exception when used, which is not implemented yet
 
 # Missing features
 - Interrupts & privileged flag

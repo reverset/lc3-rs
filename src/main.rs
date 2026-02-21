@@ -844,7 +844,9 @@ impl<'a> Machine<'a> {
             // getc
             0x20 => {
                 let mut buf = [0u8; 1]; // only reads 1 ASCII char (7-bits)
-                self.stdin.read_exact(&mut buf).expect("failed to read stdin");
+                self.stdin
+                    .read_exact(&mut buf)
+                    .expect("failed to read stdin");
 
                 *self.registers.get_mut(Register::R0) = buf[0] as i16;
             }
@@ -906,40 +908,42 @@ fn read_binary_file(file: &Path) -> Vec<Instruction> {
 }
 
 fn main() {
-        // maybe use clap or something ...
+    // maybe use clap or something ...
 
-        let args: Vec<String> = std::env::args().collect();
+    let args: Vec<String> = std::env::args().collect();
 
-        // probably a better way to do this
-        let args_ref = args.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
+    // probably a better way to do this
+    let args_ref = args.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
 
-        match args_ref[..] {
-            [_, "run"] => {
-                println!("Please enter path of binary file");
-            }
-            [_, "run", path] => {
-                let binary = read_binary_file(Path::new(path));
-
-                let orig = binary[0].0;
-
-                let mut machine = Machine::new(
-                    std::io::stdin(),
-                    std::io::stdout(),
-                    orig as u16,
-                    &binary[1..],
-                );
-
-                machine.run_until_halt();
-            }
-
-            _ => {
-                println!("
-    lc3-rs help
-    Subcommands:
-        run <path>\t\t\t Run a assembled binary file for the LC-3.
-                ");
-            }
+    match args_ref[..] {
+        [_, "run"] => {
+            println!("Please enter path of binary file");
         }
+        [_, "run", path] => {
+            let binary = read_binary_file(Path::new(path));
+
+            let orig = binary[0].0;
+
+            let mut machine = Machine::new(
+                std::io::stdin(),
+                std::io::stdout(),
+                orig as u16,
+                &binary[1..],
+            );
+
+            machine.run_until_halt();
+        }
+
+        _ => {
+            println!(
+                "
+lc3-rs help
+Subcommands:
+    run <path>\t\t\t Run a assembled binary file for the LC-3.
+                "
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1296,7 +1300,10 @@ mod tests {
         machine.run_until_halt();
         drop(machine);
 
-        assert_eq!(String::from_utf8(output.into_inner().unwrap()).unwrap(), text.repeat(5));
+        assert_eq!(
+            String::from_utf8(output.into_inner().unwrap()).unwrap(),
+            text.repeat(5)
+        );
     }
 
     #[test]
@@ -1308,10 +1315,7 @@ mod tests {
             input,
             std::io::stdout(),
             0x3000,
-            &[
-                Instruction::trap_get_c(),
-                Instruction::trap_halt(),
-            ],
+            &[Instruction::trap_get_c(), Instruction::trap_halt()],
         );
 
         machine.run_until_halt();
