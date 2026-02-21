@@ -4,9 +4,9 @@
 | Feature         | Info                                |
 |-----------------|-------------------------------------|
 | Virtual Machine | [Mostly implemented](#instructions) |
-| Assembler       | soon ™️                             |
-| Disassembler    | soon ™️                             |
-| C Compiler      | soon ™️                             |
+| Assembler       | soon™️                              |
+| Disassembler    | soon™️                              |
+| C Compiler      | soon™️                              |
 
 ## References
 - https://www.jmeiners.com/lc3-vm/supplies/lc3-isa.pdf (best source)
