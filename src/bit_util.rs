@@ -55,18 +55,21 @@ pub fn i5_to_i8(x: i8) -> i8 {
     }
 }
 
+// TODO, for debugging these should be somewhere
+
+#[allow(unused)]
 pub fn check_i9_range(x: i16) {
     assert!((-256..=255).contains(&x));
 }
-
+#[allow(unused)]
 pub fn check_i6_range(x: i8) {
     assert!((-32..=31).contains(&x))
 }
-
+#[allow(unused)]
 pub fn check_i5_range(x: i8) {
     assert!((-8..=7).contains(&x))
 }
-
+#[allow(unused)]
 pub fn check_i11_range(x: i16) {
     assert!((-1024..=1023).contains(&x))
 }

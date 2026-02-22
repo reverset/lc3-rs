@@ -175,6 +175,7 @@ pub enum Instruction {
     Reserved,
 }
 
+#[allow(unused)]
 impl Instruction {
     pub fn decode(instr: u16) -> Self {
         let header = Self::get_header(instr);
