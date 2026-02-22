@@ -5,7 +5,7 @@ of exceptions, see [Missing Features](#missing-features).
 
 ## Example Usage
 ```bash
-cargo run -r -- run example-objs/hello2.obj
+cargo run -r -- run examples/hello2.obj
 ```
 
 Output of the above program:
