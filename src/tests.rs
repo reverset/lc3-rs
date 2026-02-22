@@ -1,42 +1,38 @@
-use std::io::{BufReader, BufWriter};
 use super::*;
+use std::io::{BufReader, BufWriter};
+
+use crate::vm::instructions::*;
 
 #[test]
 fn add_instr() {
-    let add = Instruction::add(Register::R0, Register::R1, Register::R2);
-    let add_imm = Instruction::add_imm(Register::R0, Register::R1, 5);
+    let add = Instruction::Add(Register::R0, Register::R1, Register::R2).encode();
+    let add_imm = Instruction::AddImmediate(Register::R0, Register::R1, 5.into()).encode();
 
-    assert_eq!(format!("{add}"), "0b0001000001000010");
-    assert_eq!(format!("{add_imm}"), "0b0001000001100101");
-
-    assert!(add.is_add());
-    assert!(add_imm.is_add());
+    assert_eq!(format!("{add:016b}"), "0001000001000010");
+    assert_eq!(format!("{add_imm:016b}"), "0001000001100101");
 }
 
 #[test]
 fn and_instr() {
-    let and = Instruction::and(Register::R0, Register::R1, Register::R2);
-    let and_imm = Instruction::and_imm(Register::R0, Register::R1, 5);
+    let and = Instruction::And(Register::R0, Register::R1, Register::R2).encode();
+    let and_imm = Instruction::AndImmediate(Register::R0, Register::R1, 5.into()).encode();
 
-    assert_eq!(format!("{and}"), "0b0101000001000010");
-    assert_eq!(format!("{and_imm}"), "0b0101000001100101");
-
-    assert!(and.is_and());
-    assert!(and_imm.is_and());
+    assert_eq!(format!("{and:016b}"), "0101000001000010");
+    assert_eq!(format!("{and_imm:016b}"), "0101000001100101");
 }
 
 #[test]
 fn not_instr() {
-    let not = Instruction::not(Register::R0, Register::R1);
+    let not = Instruction::Not(Register::R0, Register::R1).encode();
 
-    assert_eq!(format!("{not}"), "0b1001000001111111");
+    assert_eq!(format!("{not:016b}"), "1001000001111111");
 }
 
 #[test]
 fn add_add() {
     let mut machine = Machine::new_std(&[
-        Instruction::add_imm(Register::R0, Register::R1, 5), // r0 = 5
-        Instruction::add_imm(Register::R1, Register::R0, 5), // r1 = 10
+        Instruction::AddImmediate(Register::R0, Register::R1, 5.into()), // r0 = 5
+        Instruction::AddImmediate(Register::R1, Register::R0, 5.into()), // r1 = 10
     ]);
 
     machine.step();
@@ -49,9 +45,9 @@ fn add_add() {
 #[test]
 fn add_add_and() {
     let mut machine = Machine::new_std(&[
-        Instruction::add_imm(Register::R0, Register::R1, 5), // r0 = 5
-        Instruction::add_imm(Register::R1, Register::R1, 5), // r1 = 5
-        Instruction::and(Register::R2, Register::R0, Register::R1), // r2 = 5 (r0 & r1)
+        Instruction::AddImmediate(Register::R0, Register::R1, 5.into()), // r0 = 5
+        Instruction::AddImmediate(Register::R1, Register::R1, 5.into()), // r1 = 5
+        Instruction::And(Register::R2, Register::R0, Register::R1),      // r2 = 5 (r0 & r1)
     ]);
 
     machine.step();
@@ -66,8 +62,8 @@ fn add_add_and() {
 #[test]
 fn add_not() {
     let mut machine = Machine::new_std(&[
-        Instruction::add_imm(Register::R0, Register::R1, 5), // r0 = 5
-        Instruction::not(Register::R1, Register::R0),        // r2 = 1111111111111010 = -6 (!r0)
+        Instruction::AddImmediate(Register::R0, Register::R1, 5.into()), // r0 = 5
+        Instruction::Not(Register::R1, Register::R0), // r2 = 1111111111111010 = -6 (!r0)
     ]);
 
     machine.step();
@@ -88,18 +84,18 @@ fn print_a() {
         &[
             // largest immediate we can do is 7
             // yes this can be condensed
-            Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7
-            Instruction::add_imm(Register::R1, Register::R1, 7), // r1 = 7
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (14)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (21)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (28)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (35)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (42)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (49)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (56)
-            Instruction::add(Register::R0, Register::R0, Register::R1), // r0 = r0 + r1 (63)
-            Instruction::add_imm(Register::R0, Register::R0, 2), // r0 = r0 + 2 (65, 'A' in ASCII)
-            Instruction::trap_out(),                             // print r0
+            Instruction::AddImmediate(Register::R0, Register::R1, 7.into()), // r0 = 7
+            Instruction::AddImmediate(Register::R1, Register::R1, 7.into()), // r1 = 7
+            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (14)
+            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (21)
+            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (28)
+            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (35)
+            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (42)
+            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (49)
+            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (56)
+            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (63)
+            Instruction::AddImmediate(Register::R0, Register::R0, 2.into()), // r0 = r0 + 2 (65, 'A' in ASCII)
+            Instruction::trap_out(),                                         // print r0
             Instruction::trap_halt(),
         ],
     );
@@ -116,10 +112,10 @@ fn print_a() {
 #[test]
 fn check_branching() {
     let mut machine = Machine::new_std(&[
-        Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7 // flag = p
-        Instruction::branch(0b001, 1), // check if positive, then skip over the next instruction
+        Instruction::AddImmediate(Register::R0, Register::R1, 7.into()), // r0 = 7 // flag = p
+        Instruction::Branch(0b001.into(), 1.into()), // check if positive, then skip over the next instruction
         Instruction::trap_halt(),
-        Instruction::add_imm(Register::R0, Register::R0, 7), // r0 = 14
+        Instruction::AddImmediate(Register::R0, Register::R0, 7.into()), // r0 = 14
         Instruction::trap_halt(),
     ]);
     machine.run_until_halt();
@@ -127,10 +123,10 @@ fn check_branching() {
     assert_eq!(machine.registers.get(Register::R0), 14);
 
     let mut machine = Machine::new_std(&[
-        Instruction::add_imm(Register::R0, Register::R1, 7), // r0 = 7 // flag = p
-        Instruction::branch(0b110, 1), // check if negative or zero (false), so we don't jump
+        Instruction::AddImmediate(Register::R0, Register::R1, 7.into()), // r0 = 7 // flag = p
+        Instruction::Branch(0b110.into(), 1.into()), // check if negative or zero (false), so we don't jump
         Instruction::trap_halt(),
-        Instruction::add_imm(Register::R0, Register::R0, 7), // r0 = 14
+        Instruction::AddImmediate(Register::R0, Register::R0, 7.into()), // r0 = 14
         Instruction::trap_halt(),
     ]);
     machine.run_until_halt();
@@ -138,7 +134,7 @@ fn check_branching() {
     assert_eq!(machine.registers.get(Register::R0), 7);
 
     let mut machine = Machine::new_std(&[
-        Instruction::branch(0b111, -1), // check if negative or zero (false), so we don't jump
+        Instruction::Branch(0b111.into(), (-1).into()), // check if negative or zero (false), so we don't jump
     ]);
 
     machine.step();
@@ -147,10 +143,21 @@ fn check_branching() {
 }
 
 #[test]
+fn check_branch_bits() {
+    let branch = Instruction::Branch(0b111.into(), (-1).into()).encode();
+
+    assert_eq!(format!("{branch:016b}"), "0000111111111111");
+
+    let branch = Instruction::decode(branch);
+
+    assert_eq!(branch, Instruction::Branch(0b111.into(), (-1).into()));
+}
+
+#[test]
 fn check_jmp() {
     let mut machine = Machine::new_std(&[
-        Instruction::add_imm(Register::R0, Register::R1, 4), // r0 = 4
-        Instruction::jmp(Register::R0),                      // jmp to 4 (r0 = 4)
+        Instruction::AddImmediate(Register::R0, Register::R1, 4.into()), // r0 = 4
+        Instruction::Jump(Register::R0),                                 // jmp to 4 (r0 = 4)
         Instruction::trap_halt(), // this should not happen since we jumped over it
     ]);
 
@@ -163,7 +170,7 @@ fn check_jmp() {
 #[test]
 fn check_ld() {
     let mut machine = Machine::new_std(&[
-        Instruction::ld(Register::R0, -2), // r0 = 50 (see code after this)
+        Instruction::Load(Register::R0, (-2).into()), // r0 = 50 (see code after this)
         Instruction::trap_halt(),
     ]);
 
@@ -182,8 +189,8 @@ fn hello_world() {
         &mut output,
         0x3000,
         &[
-            Instruction::lea(Register::R0, 2), // r0 = text_addr
-            Instruction::trap_puts(),          // print string stored at address in r0
+            Instruction::LoadEffectiveAddress(Register::R0, 2.into()), // r0 = text_addr
+            Instruction::trap_puts(), // print string stored at address in r0
             Instruction::trap_halt(),
         ],
     );
@@ -205,7 +212,7 @@ fn hello_world() {
 #[test]
 fn check_ldi() {
     let mut machine = Machine::new_std(&[
-        Instruction::ldi(Register::R0, -2), // r0 = 20 (load value stored at the address stored in ip offset -2)
+        Instruction::LoadIndirect(Register::R0, (-2).into()), // r0 = 20 (load value stored at the address stored in ip offset -2)
         Instruction::trap_halt(),
     ]);
 
@@ -219,10 +226,10 @@ fn check_ldi() {
 #[test]
 fn check_ldr() {
     let mut machine = Machine::new_std(&[
-        Instruction::ld(Register::R0, -2),
-        Instruction::ldr(Register::R1, Register::R0, 0),
-        Instruction::ldr(Register::R2, Register::R0, 1),
-        Instruction::ldr(Register::R3, Register::R0, 2),
+        Instruction::Load(Register::R0, (-2).into()),
+        Instruction::LoadRegister(Register::R1, Register::R0, 0.into()),
+        Instruction::LoadRegister(Register::R2, Register::R0, 1.into()),
+        Instruction::LoadRegister(Register::R3, Register::R0, 2.into()),
         Instruction::trap_halt(),
     ]);
 
@@ -238,11 +245,11 @@ fn check_ldr() {
 #[test]
 fn check_jsr() {
     let mut machine = Machine::new_std(&[
-        Instruction::jsr(3),
-        Instruction::add_imm(Register::R5, Register::R0, 1),
-        Instruction::add_imm(Register::R5, Register::R0, 1),
-        Instruction::add_imm(Register::R5, Register::R0, 1),
-        Instruction::add_imm(Register::R0, Register::R1, 5),
+        Instruction::JumpSubroutine(3.into()),
+        Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
+        Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
+        Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
+        Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
         Instruction::trap_halt(),
     ]);
 
@@ -257,12 +264,12 @@ fn check_jsr() {
 #[test]
 fn check_jsrr() {
     let mut machine = Machine::new_std(&[
-        Instruction::ld(Register::R1, -2),
-        Instruction::jsrr(Register::R1),
-        Instruction::add_imm(Register::R5, Register::R0, 1),
-        Instruction::add_imm(Register::R5, Register::R0, 1),
-        Instruction::add_imm(Register::R5, Register::R0, 1),
-        Instruction::add_imm(Register::R0, Register::R2, 5),
+        Instruction::Load(Register::R1, (-2).into()),
+        Instruction::JumpSubroutineRegister(Register::R1),
+        Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
+        Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
+        Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
+        Instruction::AddImmediate(Register::R0, Register::R2, 5.into()),
         Instruction::trap_halt(),
     ]);
 
@@ -280,8 +287,8 @@ fn check_jsrr() {
 #[test]
 fn check_st() {
     let mut machine = Machine::new_std(&[
-        Instruction::add_imm(Register::R0, Register::R1, 5),
-        Instruction::st(Register::R0, -3),
+        Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
+        Instruction::Store(Register::R0, (-3).into()),
         Instruction::trap_halt(),
     ]);
 
@@ -293,8 +300,8 @@ fn check_st() {
 #[test]
 fn check_sti() {
     let mut machine = Machine::new_std(&[
-        Instruction::add_imm(Register::R0, Register::R1, 5),
-        Instruction::sti(Register::R0, -3),
+        Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
+        Instruction::StoreIndirect(Register::R0, (-3).into()),
         Instruction::trap_halt(),
     ]);
 
@@ -308,11 +315,11 @@ fn check_sti() {
 #[test]
 fn check_str() {
     let mut machine = Machine::new_std(&[
-        Instruction::ld(Register::R0, -2),
-        Instruction::add_imm(Register::R1, Register::R5, 5),
-        Instruction::add_imm(Register::R2, Register::R5, 6),
-        Instruction::str(Register::R1, Register::R0, 0),
-        Instruction::str(Register::R2, Register::R0, 1),
+        Instruction::Load(Register::R0, (-2).into()),
+        Instruction::AddImmediate(Register::R1, Register::R5, 5.into()),
+        Instruction::AddImmediate(Register::R2, Register::R5, 6.into()),
+        Instruction::StoreRegister(Register::R1, Register::R0, 0.into()),
+        Instruction::StoreRegister(Register::R2, Register::R0, 1.into()),
         Instruction::trap_halt(),
     ]);
 
@@ -334,11 +341,11 @@ fn hello_world_5() {
         &mut output,
         0x3000,
         &[
-            Instruction::lea(Register::R0, 5),
-            Instruction::ld(Register::R1, 19),
+            Instruction::LoadEffectiveAddress(Register::R0, 5.into()),
+            Instruction::Load(Register::R1, 19.into()),
             Instruction::trap_puts(),
-            Instruction::add_imm(Register::R1, Register::R1, -1),
-            Instruction::branch(0b001, -3),
+            Instruction::AddImmediate(Register::R1, Register::R1, (-1).into()),
+            Instruction::Branch(0b001.into(), (-3).into()),
             Instruction::trap_halt(),
         ],
     );

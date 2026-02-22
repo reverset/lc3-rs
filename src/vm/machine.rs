@@ -1,4 +1,9 @@
 use crate::bit_util::convert_str_to_i16_vec;
+use crate::vm::instructions::Instruction::{
+    Add, AddImmediate, And, AndImmediate, Branch, Jump, JumpSubroutine, JumpSubroutineRegister,
+    Load, LoadEffectiveAddress, LoadIndirect, LoadRegister, Not, Reserved, ReturnToInterrupt,
+    Store, StoreIndirect, StoreRegister, Trap,
+};
 use crate::vm::instructions::{Instruction, Register, Registers};
 use std::io::{Read, Write};
 use std::ops::{Index, IndexMut};
@@ -65,7 +70,6 @@ pub struct Machine<'a> {
     pub condition_code: ConditionCode,
 
     pub halted: bool,
-    pub jumped: bool,
 
     pub stdin: Box<dyn Read + 'a>,
     pub stdout: Box<dyn Write + 'a>,
@@ -86,9 +90,9 @@ impl<'a> Machine<'a> {
         orig: u16,
         instructions: &[Instruction],
     ) -> Self {
-        let mut memory = Vec::from_iter((0..orig).map(|_| 0)); // instructions start at 0x3000.
+        let mut memory = Vec::from_iter((0..orig).map(|_| 0));
         for inst in instructions {
-            memory.push(inst.0);
+            memory.push(inst.encode() as i16);
         }
 
         Self {
@@ -97,7 +101,6 @@ impl<'a> Machine<'a> {
             ip: orig,
             condition_code: ConditionCode::Zero,
             halted: false,
-            jumped: false,
             stdin: Box::new(read),
             stdout: Box::new(write),
         }
@@ -126,125 +129,134 @@ impl<'a> Machine<'a> {
     pub fn step(&mut self) {
         let instr = self.memory[self.ip];
         self.ip += 1; // ip points to the next instruction
-        self.evaluate(Instruction(instr));
+        self.evaluate(Instruction::decode(instr as u16));
+    }
+
+    pub fn add_to_ip(&mut self, offset: i16) {
+        self.ip.wrapping_add_signed(offset);
     }
 
     // cleanup needed
     pub fn evaluate(&mut self, instr: Instruction) {
-        if instr.is_add() {
-            self.handle_add(instr);
-        } else if instr.is_and() {
-            self.handle_and(instr);
-        } else if let Some((flags, offset)) = instr.get_branch() {
-            // at least one '1' matches with the condition flags
-            if (self.condition_code.into_flags() & flags) != 0 {
-                self.ip = (self.ip as i32 + offset as i32) as u16;
-                self.jumped = true;
+        match instr {
+            Add(dest, s1, s2) => {
+                let s1 = self.registers.get(s1);
+                let s2 = self.registers.get(s2);
+
+                *self.registers.get_mut(dest) = s1.wrapping_add(s2);
+                self.set_condition_code_based_on(dest);
             }
-        } else if let Some(reg) = instr.get_jmp() {
-            self.ip = self.registers.get(reg) as u16;
-            self.jumped = true;
-        } else if let Some(offset) = instr.get_jsr() {
-            *self.registers.get_mut(Register::R7) = self.ip as i16;
-            self.ip = ((self.ip as i32) + (offset as i32)) as u16;
-        } else if let Some(baser) = instr.get_jsrr() {
-            *self.registers.get_mut(Register::R7) = self.ip as i16;
 
-            let addr = self.registers.get(baser.into());
-            self.ip = addr as u16;
-        } else if let Some((dr, offset)) = instr.get_ld() {
-            // cast to i32 so that subtraction can be done properly
-            let value = self.memory[((self.ip as i32) + (offset as i32)) as u16];
-            *self.registers.get_mut(dr.into()) = value;
+            AddImmediate(dest, s1, imm5) => {
+                let s1 = self.registers.get(s1);
 
-            self.set_condition_code_based_on(dr.into());
-        } else if let Some((dr, offset)) = instr.get_ldi() {
-            let addr = self.memory[((self.ip as i32) + (offset as i32)) as u16];
-            let value = self.memory[addr as u16];
-            *self.registers.get_mut(dr.into()) = value;
+                *self.registers.get_mut(dest) = s1.wrapping_add(imm5.into_inner() as i16);
+                self.set_condition_code_based_on(dest);
+            }
 
-            self.set_condition_code_based_on(dr.into());
-        } else if let Some((dr, baser, offset)) = instr.get_ldr() {
-            let addr = self.registers.get(baser.into()) + offset as i16;
-            let value = self.memory[addr as u16];
-            *self.registers.get_mut(dr.into()) = value;
+            And(dest, s1, s2) => {
+                let s1 = self.registers.get(s1);
+                let s2 = self.registers.get(s2);
 
-            self.set_condition_code_based_on(dr.into());
-        } else if let Some((dr, offset)) = instr.get_lea() {
-            let effective_addr = ((self.ip as i32) + (offset as i32)) as i16;
-            *self.registers.get_mut(dr) = effective_addr;
+                *self.registers.get_mut(dest) = s1 & s2;
+                self.set_condition_code_based_on(dest);
+            }
 
-            self.set_condition_code_based_on(dr);
+            AndImmediate(dest, s1, imm5) => {
+                let s1 = self.registers.get(s1);
+
+                *self.registers.get_mut(dest) = s1 & (imm5.into_inner() as i16);
+                self.set_condition_code_based_on(dest);
+            }
+
+            Branch(flags, offset) => {
+                if self.condition_code.into_flags() & flags.into_flags() != 0 {
+                    self.ip = self.ip.wrapping_add_signed(offset.into_inner());
+                }
+            }
+
+            Jump(register) => {
+                self.ip = self.registers.get(register) as u16;
+            }
+
+            JumpSubroutine(offset) => {
+                *self.registers.get_mut(Register::R7) = self.ip as i16;
+                self.ip = self.ip.wrapping_add_signed(offset.into_inner());
+            }
+
+            JumpSubroutineRegister(baser) => {
+                *self.registers.get_mut(Register::R7) = self.ip as i16;
+                self.ip = self.registers.get(baser) as u16;
+            }
+
+            Load(dest, offset) => {
+                let addr = self.ip.wrapping_add_signed(offset.into_inner());
+                let val = self.memory[addr];
+
+                *self.registers.get_mut(dest) = val;
+                self.set_condition_code_based_on(dest);
+            }
+
+            LoadIndirect(dest, offset) => {
+                let addr = self.ip.wrapping_add_signed(offset.into_inner());
+                let addr = self.memory[addr];
+
+                let val = self.memory[addr as u16];
+                *self.registers.get_mut(dest) = val;
+                self.set_condition_code_based_on(dest);
+            }
+
+            LoadRegister(dest, baser, offset) => {
+                let addr = (self.registers.get(baser) as u16)
+                    .wrapping_add_signed(offset.into_inner() as i16);
+                let val = self.memory[addr];
+
+                *self.registers.get_mut(dest) = val;
+                self.set_condition_code_based_on(dest);
+            }
+
+            LoadEffectiveAddress(dest, offset) => {
+                let ea = self.ip.wrapping_add_signed(offset.into_inner());
+
+                *self.registers.get_mut(dest) = ea as i16;
+                self.set_condition_code_based_on(dest);
+            }
+
+            Not(dest, source) => {
+                let source = self.registers.get(source);
+
+                *self.registers.get_mut(dest) = !source;
+                self.set_condition_code_based_on(dest);
+            }
+
+            // RET is just JMP
+            ReturnToInterrupt => {
+                todo!("RTI not implemented")
+            }
+
+            Store(source, offset) => {
+                let addr = self.ip.wrapping_add_signed(offset.into_inner());
+                self.memory[addr] = self.registers.get(source);
+            }
+
+            StoreIndirect(source, offset) => {
+                let addr = self.ip.wrapping_add_signed(offset.into_inner());
+                let addr = self.memory[addr] as u16;
+
+                self.memory[addr] = self.registers.get(source);
+            }
+
+            StoreRegister(source, baser, offset) => {
+                let addr = self.registers.get(baser) as u16;
+                let addr = addr.wrapping_add_signed(offset.into_inner() as i16);
+
+                self.memory[addr] = self.registers.get(source);
+            }
+
+            Trap(vector) => self.handle_trap(vector),
+
+            Reserved => todo!("reserved not implemented"),
         }
-        // ...
-        else if instr.is_not() {
-            self.handle_not(instr);
-        }
-        // missing RTI
-        else if let Some((sr, offset)) = instr.get_st() {
-            let addr = ((self.ip as i32) + (offset as i32)) as u16;
-            self.memory[addr] = self.registers.get(sr.into());
-            self.set_condition_code_based_on(sr.into());
-        } else if let Some((sr, offset)) = instr.get_sti() {
-            let addr = ((self.ip as i32) + (offset as i32)) as u16;
-            let addr = self.memory[addr];
-            self.memory[addr as u16] = self.registers.get(sr.into());
-            self.set_condition_code_based_on(sr.into());
-        } else if let Some((sr, baser, offset)) = instr.get_str() {
-            let addr = self.registers.get(baser.into()) + offset as i16;
-            self.memory[addr as u16] = self.registers.get(sr.into());
-            self.set_condition_code_based_on(sr.into());
-        } else if let Some(vec) = instr.get_trap_vector() {
-            self.handle_trap(vec);
-        }
-    }
-
-    fn handle_add(&mut self, instr: Instruction) {
-        // if immediate
-        if instr.check_bit_5() {
-            let (dr, sr1, imm) = instr.get_dr_sr1_imm5();
-
-            let sr1 = self.registers.get(sr1.into());
-
-            *self.registers.get_mut(dr.into()) = sr1 + (imm as i16);
-            self.set_condition_code_based_on(dr.into());
-        } else {
-            let (dr, sr1, sr2) = instr.get_dr_sr1_sr2();
-            let sr1 = self.registers.get(sr1.into());
-            let sr2 = self.registers.get(sr2.into());
-
-            *self.registers.get_mut(dr.into()) = sr1 + sr2;
-            self.set_condition_code_based_on(dr.into());
-        }
-    }
-
-    // FIXME duplicate code
-    fn handle_and(&mut self, instr: Instruction) {
-        // if immediate
-        if instr.check_bit_5() {
-            let (dr, sr1, imm) = instr.get_dr_sr1_imm5();
-
-            let sr1 = self.registers.get(sr1.into());
-
-            *self.registers.get_mut(dr.into()) = sr1 & (imm as i16); // & instead of +
-            self.set_condition_code_based_on(dr.into());
-        } else {
-            let (dr, sr1, sr2) = instr.get_dr_sr1_sr2();
-            let sr1 = self.registers.get(sr1.into());
-            let sr2 = self.registers.get(sr2.into());
-
-            *self.registers.get_mut(dr.into()) = sr1 & sr2;
-
-            self.set_condition_code_based_on(dr.into());
-        }
-    }
-
-    fn handle_not(&mut self, instr: Instruction) {
-        let (dr, sr) = instr.get_dr_sr();
-        let sr = self.registers.get(sr.into());
-
-        *self.registers.get_mut(dr.into()) = !sr;
-        self.set_condition_code_based_on(dr.into());
     }
 
     fn handle_trap(&mut self, vec: u8) {

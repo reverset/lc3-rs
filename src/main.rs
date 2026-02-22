@@ -5,27 +5,31 @@ mod tests;
 
 mod vm;
 
-use vm::instructions::*;
 use vm::machine::*;
 
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-fn read_binary_file(file: &Path) -> Vec<Instruction> {
+fn read_binary_file(file: &Path) -> (u16, Vec<u16>) {
     let mut res = Vec::new();
 
     let mut file = File::open(file).unwrap();
+    let mut orig = None;
     loop {
         let mut buf = [0u8; 2];
         if file.read_exact(&mut buf).is_err() {
             break;
         }
-        let instr = Instruction(((buf[0] as i16) << 8) | ((buf[1] as i16) & 0b11111111));
-        res.push(instr);
+        let value = ((buf[0] as u16) << 8) | ((buf[1] as u16) & 0b11111111);
+        if orig.is_none() {
+            orig = Some(value);
+        } else {
+            res.push(value);
+        }
     }
 
-    res
+    (orig.unwrap(), res)
 }
 
 fn main() {
@@ -38,19 +42,16 @@ fn main() {
 
     match args_ref[..] {
         [_, "run"] => {
-            println!("Please enter path of binary file");
+            println!("Please enter path of object file");
         }
         [_, "run", path] => {
-            let binary = read_binary_file(Path::new(path));
+            let (orig, binary) = read_binary_file(Path::new(path));
 
-            let orig = binary[0].0;
+            let mut machine = Machine::new(std::io::stdin(), std::io::stdout(), orig, &[]);
 
-            let mut machine = Machine::new(
-                std::io::stdin(),
-                std::io::stdout(),
-                orig as u16,
-                &binary[1..],
-            );
+            let bin = binary.iter().map(|x| *x as i16).collect::<Vec<i16>>();
+
+            machine.set_span_at(orig, &bin[..]);
 
             machine.run_until_halt();
         }
@@ -60,7 +61,7 @@ fn main() {
                 "
 lc3-rs help
 Subcommands:
-    run <path>\t\t\t Run a assembled binary file for the LC-3.
+    run <path>\t\t\t Run a assembled object file for the LC-3.
                 "
             );
         }
