@@ -2,7 +2,18 @@ LC-3 OBJ FILE
 
 .TEXT
 3000
-22
+68
+E019
+F022
+F020
+243F
+1202
+0404
+E004
+F022
+127F
+03FD
+F025
 0048
 0065
 006C
@@ -18,40 +29,95 @@ LC-3 OBJ FILE
 0021
 000A
 0000
-0005
-E1EF
-23FD
-F022
-127F
-03FD
-F025
+0048
+006F
+0077
+0020
+006D
+0061
+006E
+0079
+0020
+0074
+0069
+006D
+0065
+0073
+0020
+0028
+0031
+0020
+0063
+0068
+0061
+0072
+0020
+0070
+006C
+0065
+0061
+0073
+0065
+0029
+0020
+0028
+0030
+002E
+002E
+003D
+0039
+0029
+003A
+0020
+0000
+FFD0
 
 .SYMBOL
 ADDR | EXT | LABEL
-3000 |   0 | HELLO
-300F |   0 | COUNTER
+3007 |   0 | LOOP
+300A |   0 | END
+300B |   0 | HELLO
+301A |   0 | PROMPT
+3043 |   0 | NUM_OFFSET
 
 .LINKER_INFO
 
 .DEBUG
 # DEBUG SYMBOLS FOR LC3TOOLS
 
-LABEL   | INDEX
-HELLO   |    13
-COUNTER |    46
+LABEL      | INDEX
+LOOP       |   125
+END        |   161
+HELLO      |   171
+PROMPT     |   204
+NUM_OFFSET |   264
 ====================
 LINE | ADDR | SOURCE
    0 | ???? | .orig x3000\n
    1 | ???? | \n
-   2 | 3000 | HELLO .stringz \"Hello, World!\\n\"\n
-   3 | 300F | COUNTER .fill 5\n
-   4 | ???? | \n
-   5 | 3010 | LEA R0, HELLO\n
-   6 | 3011 | LD R1, COUNTER\n
-   7 | 3012 | PUTS\n
-   8 | 3013 | ADD R1, R1, #-1\n
-   9 | 3014 | BRp #-3\n
-  10 | 3015 | HALT\n
-  11 | ???? | \n
-  12 | ???? | .end
+   2 | ???? | ; comment\n
+   3 | ???? | \n
+   4 | 3000 | LEA R0, PROMPT\n
+   5 | 3001 | PUTS\n
+   6 | 3002 | GETC\n
+   7 | ???? | \n
+   8 | 3003 | LD R2, NUM_OFFSET\n
+   9 | 3004 | ADD R1, R0, R2\n
+  10 | ???? | \n
+  11 | 3005 | BRz END\n
+  12 | ???? | \n
+  13 | 3006 | LEA R0, HELLO ; another comment\n
+  14 | 3007 | LOOP PUTS\n
+  15 | 3008 | ADD R1, R1, #-1\n
+  16 | 3009 | BRp LOOP\n
+  17 | ???? | \n
+  18 | ???? | END\n
+  19 | 300A | HALT\n
+  20 | ???? | \n
+  21 | 300B | HELLO .stringz \"Hello, World!\\n\"\n
+  22 | 301A | PROMPT .stringz \"How many times (1 char please) (0..=9): \"\n
+  23 | ???? | \n
+  24 | 3043 | NUM_OFFSET .fill #-48\n
+  25 | ???? | \n
+  26 | ???? | .end
 ====================
