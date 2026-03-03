@@ -56,6 +56,7 @@ Output of the above program:
 # Missing features
 - Privileged flag
 - Interrupt vector table
+- Interrupt processing
 - `RTI` instruction
 - Supervisor stack & user stack
 - `putsp` TRAP vector
@@ -65,4 +66,11 @@ Output of the above program:
   - 0xFE04 Display status
   - 0xFE06 Display data
   - 0xFFFE Machine control
+- Priority level (0-7)
+- Process status register (PSR) (this contains info about priviledge, priority, and condition codes)
+- Privledge mode exception (RTI invoked in User mode)
+- Stack
+  - Supervisor stack (SSP) (for privledged mode)
+  - User stack (USP) (for user mode)
+  - Stack pointer (R6)
 - And likely a few more things
