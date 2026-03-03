@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use crate::io::AssemblyInfo;
+use crate::io::{AssemblyInfo, DataInfo};
 
 
 pub fn read(mut data: &[u8]) -> AssemblyInfo {
@@ -23,5 +23,5 @@ pub fn read(mut data: &[u8]) -> AssemblyInfo {
         }
     }
 
-    AssemblyInfo { orig: orig.unwrap(), data: res }
+    AssemblyInfo { data: vec![DataInfo {orig: orig.unwrap(), data: res}] }
 }

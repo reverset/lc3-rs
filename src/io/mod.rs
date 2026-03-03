@@ -5,9 +5,15 @@ pub mod read_raw;
 
 const LC3_OBJ_HEADER: &[u8] = b"LC-3 OBJ FILE";
 
-pub struct AssemblyInfo { // TODO, debug info, linker info, etc
+#[derive(Debug)]
+pub struct DataInfo {
     pub orig: u16,
     pub data: Vec<u16>,
+}
+
+#[derive(Debug)]
+pub struct AssemblyInfo { // TODO, debug info, linker info, etc
+    pub data: Vec<DataInfo>,
 }
 
 pub fn read_file(path: &Path) -> AssemblyInfo {

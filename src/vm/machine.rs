@@ -16,6 +16,12 @@ pub enum ConditionCode {
     Positive,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum PrivilegeMode {
+    Supervisor,
+    User,
+}
+
 impl ConditionCode {
     pub fn into_flags(self) -> u8 {
         match self {
@@ -68,6 +74,7 @@ pub struct Machine<'a> {
     pub memory: Memory,
     pub ip: u16, // LC-3 is word addressable.
     pub condition_code: ConditionCode,
+    pub privilege: PrivilegeMode,
 
     pub halted: bool,
 
@@ -100,10 +107,15 @@ impl<'a> Machine<'a> {
             memory: Memory(memory),
             ip: orig,
             condition_code: ConditionCode::Zero,
+            privilege: PrivilegeMode::User,
             halted: false,
             stdin: Box::new(read),
             stdout: Box::new(write),
         }
+    }
+
+    pub fn set_privilege(&mut self, privilege: PrivilegeMode) {
+        self.privilege = privilege;
     }
 
     pub fn set_memory_at(&mut self, index: u16, value: i16) {

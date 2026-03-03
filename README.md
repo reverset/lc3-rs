@@ -67,10 +67,11 @@ Output of the above program:
   - 0xFE06 Display data
   - 0xFFFE Machine control
 - Priority level (0-7)
-- Process status register (PSR) (this contains info about priviledge, priority, and condition codes)
-- Privledge mode exception (RTI invoked in User mode)
+- Process status register (PSR) (this contains info about privilege, priority, and condition codes)
+- Privilege mode exception (RTI invoked in User mode)
 - Stack
-  - Supervisor stack (SSP) (for privledged mode)
+  - Supervisor stack (SSP) (for privileged mode)
   - User stack (USP) (for user mode)
   - Stack pointer (R6)
+- MCR (Machine control register)
 - And likely a few more things
