@@ -55,7 +55,6 @@ Output of the above program:
 
 # Missing features
 - Interrupt processing
-- `RTI` instruction
 - `putsp` TRAP vector
 - Device register assignments, namely:
   - 0xFE00 Keyboard status
