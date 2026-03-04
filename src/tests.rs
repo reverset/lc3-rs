@@ -379,3 +379,34 @@ fn test_getc() {
 
     assert_eq!(machine.registers.get(Register::R0), 0b0000111);
 }
+
+#[test]
+fn stacks() {
+    let mut machine = Machine::new_std(&[]);
+
+    machine.stack_push(2);
+    machine.stack_push(9);
+    machine.stack_push(6);
+
+    machine.set_privilege(PrivilegeMode::Supervisor);
+
+    machine.stack_push(10);
+    machine.stack_push(30);
+    machine.stack_push(90);
+
+    machine.set_privilege(PrivilegeMode::User);
+
+    assert_eq!(machine.stack_pop(), 6);
+    assert_eq!(machine.stack_pop(), 9);
+    assert_eq!(machine.stack_pop(), 2);
+
+    machine.set_privilege(PrivilegeMode::Supervisor);
+
+    assert_eq!(machine.stack_pop(), 90);
+    assert_eq!(machine.stack_pop(), 30);
+    assert_eq!(machine.stack_pop(), 10);
+
+    assert_eq!(machine.registers.get(Register::R6), 0x3000);
+    machine.set_privilege(PrivilegeMode::User);
+    assert_eq!(machine.registers.get(Register::R6), (0xFE00u16) as i16);
+}

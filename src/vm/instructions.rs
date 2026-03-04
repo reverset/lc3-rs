@@ -1,9 +1,10 @@
 use crate::bit_util::{i5_to_i8, i6_to_i8, i9_to_i16, i11_to_i16};
 use crate::vm::instructions::Instruction::{
     Add, AddImmediate, And, AndImmediate, Branch, Jump, JumpSubroutine, JumpSubroutineRegister,
-    Load, LoadEffectiveAddress, LoadIndirect, LoadRegister, Not, Reserved, ReturnToInterrupt,
+    Load, LoadEffectiveAddress, LoadIndirect, LoadRegister, Not, Reserved, ReturnFromInterrupt,
     Store, StoreIndirect, StoreRegister, Trap,
 };
+use crate::vm::machine::PrivilegeMode;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Register {
@@ -167,7 +168,7 @@ pub enum Instruction {
     LoadEffectiveAddress(Register, PcOffset9),
     Not(Register, Register),
     // RET is just a special case of JMP,
-    ReturnToInterrupt, // TODO
+    ReturnFromInterrupt, // TODO
     Store(Register, PcOffset9),
     StoreIndirect(Register, PcOffset9),
     StoreRegister(Register, Register, Offset6),
@@ -270,7 +271,7 @@ impl Instruction {
             // RET is just jmp in disguise
 
             // return to interrupt
-            0b1000 => ReturnToInterrupt,
+            0b1000 => ReturnFromInterrupt,
 
             // store & store indirect
             kind @ (0b0011 | 0b1011) => {
@@ -483,7 +484,7 @@ impl Instruction {
                 instr
             }
 
-            ReturnToInterrupt => 0b1000 << 12,
+            ReturnFromInterrupt => 0b1000 << 12,
 
             Store(source, offset) => {
                 let mut instr: u16 = 0b0011 << 12;
@@ -523,9 +524,26 @@ impl Instruction {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Registers {
     reg: [i16; 8],
+
+    ssp: i16, // R6 is actually an alias to one of these.
+    usp: i16,
+    pub mode: PrivilegeMode, // kinda duplication
+}
+
+impl Default for Registers {
+    fn default() -> Self {
+        Self {
+            reg: [0; 8],
+
+            ssp: 0x3000, // maybe -1?
+            usp: (0xFE00u16) as i16,
+
+            mode: PrivilegeMode::default(),
+        }
+    }
 }
 
 impl From<u8> for Register {
@@ -547,12 +565,27 @@ impl From<u8> for Register {
 
 impl Registers {
     pub fn get(&self, i: Register) -> i16 {
-        let i: usize = i.into();
-        self.reg[i]
+        if i == Register::R6 { // maybe cleanup idk
+             match self.mode {
+                PrivilegeMode::Supervisor => self.ssp,
+                PrivilegeMode::User => self.usp,
+            }
+        } else {
+            let i: usize = i.into();
+            self.reg[i]
+        }
+
     }
 
     pub fn get_mut(&mut self, i: Register) -> &mut i16 {
-        let i: usize = i.into();
-        &mut self.reg[i]
+        if i == Register::R6 {
+            match self.mode {
+                PrivilegeMode::Supervisor => &mut self.ssp,
+                PrivilegeMode::User => &mut self.usp,
+            }
+        } else {
+            let i: usize = i.into();
+            &mut self.reg[i]
+        }
     }
 }

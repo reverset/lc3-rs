@@ -19,7 +19,6 @@ fn get_section(line: &str) -> ObjectFileSection {
     }
 }
 
-
 pub fn read(data: &[u8]) -> AssemblyInfo {
     let data = String::from_utf8(data.to_vec()).expect("File contained invalid UTF-8, even though header stated LC-3 OBJ FILE");
     // let mut instructions = vec![];
@@ -30,30 +29,32 @@ pub fn read(data: &[u8]) -> AssemblyInfo {
 
     let lines: Vec<&str> = data.lines().collect();
 
-    for (i, line) in lines.iter().enumerate() {
-        let line = line.trim().to_lowercase();
+    let mut skip_next = false;
+    let mut orig_length: u16 = 0;
 
-        // TODO FIXME!! this is very broken
-        // first line is a orig block
-        // next line is how many instructions there are (in decimal form)
-        // after reading that many instructions, we are at a new orig block
-        // TODO IMPLEMENT ABOVE ^^^^ i need to go to sleep
+    for (i, line) in lines.iter().enumerate() {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+
+        let line = line.trim().to_lowercase();
 
         if line.starts_with(".") {
             section = get_section(&line);
         } else if !line.is_empty() {
             match section {
                 ObjectFileSection::Text => {
-                    if i + 1 < lines.len() && lines[i+1].len() < 4 && !lines[i+1].is_empty() {
-                        println!("line: {}", lines[i+1]);
-                        let orig = line.parse::<u16>().unwrap();
-                        println!("?? {}", orig);
-                        data_sections.push(DataInfo { orig, data: vec![] });
-                    } else if lines[i].len() < 4 {
-                        continue;
-                    } else {
+                    if orig_length > 0 {
+                        orig_length -= 1;
+
                         let val = u16::from_str_radix(&line, 16).unwrap();
                         data_sections.last_mut().unwrap().data.push(val);
+                    } else {
+                        let orig = u16::from_str_radix(&line, 16).unwrap();
+                        data_sections.push(DataInfo { orig, data: vec![] });
+                        orig_length = lines[i+1].parse::<u16>().unwrap();
+                        skip_next = true;
                     }
                 }
                 
@@ -62,6 +63,5 @@ pub fn read(data: &[u8]) -> AssemblyInfo {
             }
         }
     }
-    println!("sect: {data_sections:?}");
     AssemblyInfo { data: data_sections }
 }

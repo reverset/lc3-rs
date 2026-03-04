@@ -1,7 +1,7 @@
 use crate::bit_util::convert_str_to_i16_vec;
 use crate::vm::instructions::Instruction::{
     Add, AddImmediate, And, AndImmediate, Branch, Jump, JumpSubroutine, JumpSubroutineRegister,
-    Load, LoadEffectiveAddress, LoadIndirect, LoadRegister, Not, Reserved, ReturnToInterrupt,
+    Load, LoadEffectiveAddress, LoadIndirect, LoadRegister, Not, Reserved, ReturnFromInterrupt,
     Store, StoreIndirect, StoreRegister, Trap,
 };
 use crate::vm::instructions::{Instruction, Register, Registers};
@@ -20,6 +20,18 @@ pub enum ConditionCode {
 pub enum PrivilegeMode {
     Supervisor,
     User,
+}
+
+impl Default for PrivilegeMode {
+    fn default() -> Self {
+        Self::User
+    }
+}
+
+impl PrivilegeMode {
+    pub fn is_supervisor(&self) -> bool {
+        *self == PrivilegeMode::Supervisor
+    }
 }
 
 impl ConditionCode {
@@ -73,6 +85,10 @@ pub struct Machine<'a> {
     pub registers: Registers,
     pub memory: Memory,
     pub ip: u16, // LC-3 is word addressable.
+
+    // perhaps separate this into a PSR struct
+    // TODO include process priority
+    // include interrupt enable bit?
     pub condition_code: ConditionCode,
     pub privilege: PrivilegeMode,
 
@@ -116,6 +132,7 @@ impl<'a> Machine<'a> {
 
     pub fn set_privilege(&mut self, privilege: PrivilegeMode) {
         self.privilege = privilege;
+        self.registers.mode = self.privilege;
     }
 
     pub fn set_memory_at(&mut self, index: u16, value: i16) {
@@ -146,6 +163,36 @@ impl<'a> Machine<'a> {
 
     pub fn add_to_ip(&mut self, offset: i16) {
         self.ip.wrapping_add_signed(offset);
+    }
+
+    pub fn encode_psr(&self) -> u16 {
+        let mut res: u16 = 0;
+        if self.privilege == PrivilegeMode::User {
+            res |= 1 << 15;
+        }
+        let cond_codes = self.condition_code.into_flags();
+
+        res |= (cond_codes & 0b111) as u16;
+
+        res
+    }
+
+    pub fn decode_psr(&mut self, psr: u16) {
+        let privilege = psr >> 15;
+        if privilege == 0 {
+            self.privilege = PrivilegeMode::Supervisor;
+        } else {
+            self.privilege = PrivilegeMode::User;
+        }
+
+        let cond_codes = psr & 0b111;
+        self.condition_code = match cond_codes {
+            0b100 => ConditionCode::Negative,
+            0b010 => ConditionCode::Zero,
+            0b001 => ConditionCode::Positive,
+
+            _ => panic!("invalid condition code found in SSP while decoding new PSR. {:03b}", cond_codes),
+        }
     }
 
     // cleanup needed
@@ -242,8 +289,26 @@ impl<'a> Machine<'a> {
             }
 
             // RET is just JMP
-            ReturnToInterrupt => {
-                todo!("RTI not implemented")
+
+            ReturnFromInterrupt => {
+                if self.privilege.is_supervisor() {
+                    self.ip = self.stack_pop() as u16;
+                    let psr = self.stack_pop() as u16;
+
+                    self.decode_psr(psr);
+
+                    // // let value = self.registers.get(Register::R6); // R6 == SSP
+                    // // let value1 = value.wrapping_add_unsigned(1); // stack grows down, so to pop we go up
+                    // //
+                    // // self.ip = self.memory[value as u16] as u16; // restore instruction pointer from mem[R6] (SSP)
+                    //
+                    // let saved_psr = self.memory[value1 as u16]; // restore the saved PSR from mem[R6+1]
+                    // *self.registers.get_mut(Register::R6) = value1.wrapping_add_unsigned(1); // value + 2 (Set R6=R6+2)
+                    //
+                    // self.decode_psr(saved_psr as u16); // restore the saved PSR
+                } else {
+                    todo!("privilege mode exception");
+                }
             }
 
             Store(source, offset) => {
@@ -272,6 +337,8 @@ impl<'a> Machine<'a> {
     }
 
     fn handle_trap(&mut self, vec: u8) {
+        // TODO, implement trap vectors in the Machine's instructions itself,
+        // instead of implementing it within Rust
         match vec {
             // getc FIXME: this should not care for the new line at the end. It's more of a 'wait until pressed' kind of thing
             0x20 => {
@@ -304,15 +371,56 @@ impl<'a> Machine<'a> {
                 self.stdout.flush().expect("Failed to flush stdout");
             }
             // in
-            0x23 => todo!(),
+            0x23 => todo!("putsp"),
             // 0x24 putsp refer to ISA TODO
 
             // halt
             0x25 => {
                 self.halted = true;
             }
-            _ => todo!(),
+            vector => {
+                // this part is not implemented according to the ISA pdf
+
+                let psr = self.encode_psr();
+
+                self.set_privilege(PrivilegeMode::Supervisor);
+
+                let pc = self.ip;
+
+                self.stack_push(psr as i16);
+                self.stack_push(pc as i16);
+
+
+                let desired = self.memory[vector as u16];
+                self.ip = desired as u16;
+
+                // *self.registers.get_mut(Register::R7) = self.ip as i16;
+
+                // add a CLI flag for treating TRAP like an interrupt?
+                // let prev_ip = self.ip;
+                // let prev_psr = self.encode_psr();
+                //
+                // self.ip = self.memory[vector as u16] as u16;
+                // self.set_privilege(PrivilegeMode::Supervisor);
+            },
         }
+    }
+
+    pub fn stack_push(&mut self, val: i16) {
+        let original_val = self.registers.get(Register::R6) as u16;
+        let desired_val = original_val.wrapping_sub(1); // stack grows down, so to push to sub 1
+
+        *self.registers.get_mut(Register::R6) = desired_val as i16;
+
+        self.memory[desired_val] = val;
+    }
+
+    pub fn stack_pop(&mut self) -> i16 {
+        let original_val = self.registers.get(Register::R6) as u16;
+        let new_val = original_val.wrapping_add(1); // stack grows down, so to pop we add one.
+
+        *self.registers.get_mut(Register::R6) = new_val as i16;
+        self.memory[original_val]
     }
 
     fn set_condition_code_based_on(&mut self, reg: Register) {

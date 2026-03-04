@@ -42,7 +42,7 @@ Output of the above program:
 |     LEA     |      ✅      |
 |     NOT     |      ✅      |
 |     RET     |      ✅      |
-|     RTI     |      ❌      |
+|     RTI     |      ✅      |
 |     ST      |      ✅      |
 |     STI     |      ✅      |
 |     STR     |      ✅      |
@@ -54,11 +54,8 @@ Output of the above program:
 ** reserved causes an exception when used, which is not implemented yet
 
 # Missing features
-- Privileged flag
-- Interrupt vector table
 - Interrupt processing
 - `RTI` instruction
-- Supervisor stack & user stack
 - `putsp` TRAP vector
 - Device register assignments, namely:
   - 0xFE00 Keyboard status
@@ -66,12 +63,7 @@ Output of the above program:
   - 0xFE04 Display status
   - 0xFE06 Display data
   - 0xFFFE Machine control
-- Priority level (0-7)
-- Process status register (PSR) (this contains info about privilege, priority, and condition codes)
+- Priority level (0-7) (stored in PSR)
 - Privilege mode exception (RTI invoked in User mode)
-- Stack
-  - Supervisor stack (SSP) (for privileged mode)
-  - User stack (USP) (for user mode)
-  - Stack pointer (R6)
 - MCR (Machine control register)
 - And likely a few more things
