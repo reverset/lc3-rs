@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::bit_util::convert_str_to_i16_vec;
 use crate::vm::instructions::Instruction::{
     Add, AddImmediate, And, AndImmediate, Branch, Jump, JumpSubroutine, JumpSubroutineRegister,
@@ -7,6 +8,9 @@ use crate::vm::instructions::Instruction::{
 use crate::vm::instructions::{Instruction, Register, Registers};
 use std::io::{Read, Write};
 use std::ops::{Index, IndexMut};
+
+const KBSR: u16 = 0xFE00;
+const KBDR: u16 = 0xFE02;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConditionCode {
@@ -81,6 +85,12 @@ impl IndexMut<u16> for Memory {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum MemoryModificationEvent {
+    Read(i16),
+    Write(i16),
+}
+
 pub struct Machine<'a> {
     pub registers: Registers,
     pub memory: Memory,
@@ -96,6 +106,8 @@ pub struct Machine<'a> {
 
     pub stdin: Box<dyn Read + 'a>,
     pub stdout: Box<dyn Write + 'a>,
+
+    memory_event_callbacks: HashMap<u16, fn(&mut Self, MemoryModificationEvent)> // maybe a different data structure or hashing algorithm
 }
 
 // Not sure if the condition code should start as the Zero flag.
@@ -118,6 +130,14 @@ impl<'a> Machine<'a> {
             memory.push(inst.encode() as i16);
         }
 
+        let mut memory_event_callbacks: HashMap<u16, fn(&mut Self, MemoryModificationEvent)> = HashMap::new();
+
+        memory_event_callbacks.insert(KBDR, |machine, event| {
+            if let MemoryModificationEvent::Read(_) = event {
+                machine.memory[KBSR] &= !(1 << 15); // clear 15th bit
+            }
+        });
+
         Self {
             registers: Registers::default(),
             memory: Memory(memory),
@@ -127,6 +147,21 @@ impl<'a> Machine<'a> {
             halted: false,
             stdin: Box::new(read),
             stdout: Box::new(write),
+
+            memory_event_callbacks,
+        }
+    }
+
+    // true => data set
+    // false => flag cleared
+    pub fn get_keyboard_status(&self) -> bool {
+        (self.memory[KBSR] >> 15) == 1
+    }
+
+    pub fn set_keyboard_key(&mut self, data: u16) {
+        if self.memory[KBSR] == 0 { // we may not set the KBDR if this flag isn't cleared
+            self.memory[KBDR] = data as i16;
+            self.memory[KBSR] |= (1 << 15); // 15th bit is set.
         }
     }
 
@@ -135,8 +170,43 @@ impl<'a> Machine<'a> {
         self.registers.mode = self.privilege;
     }
 
+    pub fn is_address_in_io_section(&self, address: u16) -> bool {
+        address >= 0xFE00
+    }
+
+    // Set data in the IO section of memory (0xFE00 to 0xFFFF)
+    // index is the offset from 0xFE00. 0 to 511
+    pub fn set_device_data(&mut self, index: u16, data: i16) {
+        let desired = index + 0xFE00;
+        self.memory[desired] = data;
+    }
+
+    pub fn invoke_io_event(&mut self, address: u16, event: MemoryModificationEvent) {
+        let Some(callback) = self.memory_event_callbacks.get(&address) else { return; };
+
+        callback(self, event);
+    }
+
+    pub fn add_io_callback(&mut self, address: u16, func: fn(&mut Self, MemoryModificationEvent)) {
+        self.memory_event_callbacks.insert(address, func);
+    }
+
     pub fn set_memory_at(&mut self, index: u16, value: i16) {
         self.memory[index] = value;
+
+        if self.is_address_in_io_section(index) {
+            self.invoke_io_event(index, MemoryModificationEvent::Write(value));
+        }
+    }
+
+    pub fn get_memory_at(&mut self, index: u16) -> i16 {
+        let val = self.memory[index];
+
+        if self.is_address_in_io_section(index) {
+            self.invoke_io_event(index, MemoryModificationEvent::Read(val));
+        }
+
+        val
     }
 
     pub fn set_span_at(&mut self, index: u16, value: &[i16]) {
@@ -250,7 +320,7 @@ impl<'a> Machine<'a> {
 
             Load(dest, offset) => {
                 let addr = self.ip.wrapping_add_signed(offset.into_inner());
-                let val = self.memory[addr];
+                let val = self.get_memory_at(addr);
 
                 *self.registers.get_mut(dest) = val;
                 self.set_condition_code_based_on(dest);
@@ -258,9 +328,9 @@ impl<'a> Machine<'a> {
 
             LoadIndirect(dest, offset) => {
                 let addr = self.ip.wrapping_add_signed(offset.into_inner());
-                let addr = self.memory[addr];
+                let addr = self.get_memory_at(addr) as u16;
 
-                let val = self.memory[addr as u16];
+                let val = self.get_memory_at(addr);
                 *self.registers.get_mut(dest) = val;
                 self.set_condition_code_based_on(dest);
             }
@@ -268,7 +338,7 @@ impl<'a> Machine<'a> {
             LoadRegister(dest, baser, offset) => {
                 let addr = (self.registers.get(baser) as u16)
                     .wrapping_add_signed(offset.into_inner() as i16);
-                let val = self.memory[addr];
+                let val = self.get_memory_at(addr);
 
                 *self.registers.get_mut(dest) = val;
                 self.set_condition_code_based_on(dest);
@@ -296,16 +366,6 @@ impl<'a> Machine<'a> {
                     let psr = self.stack_pop() as u16;
 
                     self.decode_psr(psr);
-
-                    // // let value = self.registers.get(Register::R6); // R6 == SSP
-                    // // let value1 = value.wrapping_add_unsigned(1); // stack grows down, so to pop we go up
-                    // //
-                    // // self.ip = self.memory[value as u16] as u16; // restore instruction pointer from mem[R6] (SSP)
-                    //
-                    // let saved_psr = self.memory[value1 as u16]; // restore the saved PSR from mem[R6+1]
-                    // *self.registers.get_mut(Register::R6) = value1.wrapping_add_unsigned(1); // value + 2 (Set R6=R6+2)
-                    //
-                    // self.decode_psr(saved_psr as u16); // restore the saved PSR
                 } else {
                     todo!("privilege mode exception");
                 }
@@ -313,21 +373,21 @@ impl<'a> Machine<'a> {
 
             Store(source, offset) => {
                 let addr = self.ip.wrapping_add_signed(offset.into_inner());
-                self.memory[addr] = self.registers.get(source);
+                self.set_memory_at(addr, self.registers.get(source));
             }
 
             StoreIndirect(source, offset) => {
                 let addr = self.ip.wrapping_add_signed(offset.into_inner());
-                let addr = self.memory[addr] as u16;
+                let addr = self.get_memory_at(addr) as u16;
 
-                self.memory[addr] = self.registers.get(source);
+                self.set_memory_at(addr, self.registers.get(source));
             }
 
             StoreRegister(source, baser, offset) => {
                 let addr = self.registers.get(baser) as u16;
                 let addr = addr.wrapping_add_signed(offset.into_inner() as i16);
 
-                self.memory[addr] = self.registers.get(source);
+                self.set_memory_at(addr, self.registers.get(source));
             }
 
             Trap(vector) => self.handle_trap(vector),
@@ -361,9 +421,11 @@ impl<'a> Machine<'a> {
             0x22 => {
                 let mut addr = self.registers.get(Register::R0) as u16;
 
-                while self.memory[addr] != 0 {
+                while self.get_memory_at(addr) != 0 {
+                    let char = self.get_memory_at(addr) as u8;
+
                     self.stdout
-                        .write_all(&[self.memory[addr] as u8])
+                        .write_all(&[char])
                         .expect("Failed to write to stdout");
 
                     addr += 1;
@@ -393,15 +455,6 @@ impl<'a> Machine<'a> {
 
                 let desired = self.memory[vector as u16];
                 self.ip = desired as u16;
-
-                // *self.registers.get_mut(Register::R7) = self.ip as i16;
-
-                // add a CLI flag for treating TRAP like an interrupt?
-                // let prev_ip = self.ip;
-                // let prev_psr = self.encode_psr();
-                //
-                // self.ip = self.memory[vector as u16] as u16;
-                // self.set_privilege(PrivilegeMode::Supervisor);
             },
         }
     }
@@ -412,7 +465,7 @@ impl<'a> Machine<'a> {
 
         *self.registers.get_mut(Register::R6) = desired_val as i16;
 
-        self.memory[desired_val] = val;
+        self.set_memory_at(desired_val, val);
     }
 
     pub fn stack_pop(&mut self) -> i16 {
@@ -420,7 +473,7 @@ impl<'a> Machine<'a> {
         let new_val = original_val.wrapping_add(1); // stack grows down, so to pop we add one.
 
         *self.registers.get_mut(Register::R6) = new_val as i16;
-        self.memory[original_val]
+        self.get_memory_at(original_val)
     }
 
     fn set_condition_code_based_on(&mut self, reg: Register) {

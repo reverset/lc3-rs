@@ -31,6 +31,7 @@ fn get_position(args: &[&str], long: &str, short: Option<&str>) -> Option<usize>
 }
 
 // TODO, trying to avoid using any more libraries than necessary
+#[allow(unused)] // lol
 fn get_flag(args: &[&str], long: &str, short: Option<&str>) -> bool {
     if args.contains(&format!("--{long}").as_str()) {
         true
