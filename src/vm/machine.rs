@@ -20,16 +20,11 @@ pub enum ConditionCode {
     Positive,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PrivilegeMode {
     Supervisor,
-    User,
-}
-
-impl Default for PrivilegeMode {
-    fn default() -> Self {
-        Self::User
-    }
+    
+    #[default] User,
 }
 
 impl PrivilegeMode {
@@ -55,7 +50,7 @@ impl Memory {
         self.0.resize(size, val);
     }
 
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.0.len()
     }
 

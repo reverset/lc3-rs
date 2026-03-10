@@ -2,7 +2,7 @@ use std::io::Read;
 
 use crate::io::{AssemblyInfo, DataInfo};
 
-
+// TODO improve to allow for more orig sections
 pub fn read(mut data: &[u8]) -> AssemblyInfo {
     let mut res = Vec::new();
 

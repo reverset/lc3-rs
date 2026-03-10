@@ -1,18 +1,15 @@
-mod bit_util;
+#![cfg(feature = "cli")]
 
-#[cfg(test)]
-mod tests;
-
-mod vm;
-
-mod io;
-
-use vm::machine::*;
+use crossterm::event::{KeyCode, KeyModifiers};
+use lc3::io;
+use lc3::vm::machine::*;
+// use vm::machine::*;
 
 use core::panic;
 use std::path::Path;
+use std::time::Duration;
 
-use crate::io::AssemblyInfo;
+use lc3::io::AssemblyInfo;
 
 fn get_position(args: &[&str], long: &str, short: Option<&str>) -> Option<usize> {
     args.iter()
@@ -53,7 +50,7 @@ fn get_param(args: &[&str], long: &str, short: Option<&str>) -> Option<String> {
     }
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     // probably a better way to do this
@@ -75,8 +72,26 @@ fn main() {
                 machine.set_span_at(datum.orig, &instrs[..]);
             }
 
+            crossterm::terminal::enable_raw_mode()?;
 
-            machine.run_until_halt();
+            // machine.run_until_halt();
+            while !machine.halted {
+                if crossterm::event::poll(Duration::ZERO)? {
+                    let event = crossterm::event::read()?;
+
+                    if let Some(key_event) = event.as_key_event() {
+                        if key_event.code == KeyCode::Char('c') && key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                            break;
+                        } else if let Some(char) = key_event.code.as_char() {
+                            machine.set_keyboard_key(char as u16);
+                        }
+                    }
+                }
+
+                machine.step();
+            }
+
+            crossterm::terminal::disable_raw_mode()?;
         }
 
         _ => {
@@ -89,4 +104,7 @@ Subcommands:
             );
         }
     }
+
+
+    Ok(())
 }
