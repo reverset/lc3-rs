@@ -5,7 +5,7 @@ use crate::vm::instructions::Instruction::{
     Load, LoadEffectiveAddress, LoadIndirect, LoadRegister, Not, Reserved, ReturnFromInterrupt,
     Store, StoreIndirect, StoreRegister, Trap,
 };
-use crate::vm::instructions::{Instruction, Register, Registers};
+use crate::vm::instructions::{DesiredConditionFlags, Instruction, Register, Registers};
 use std::io::{Read, Write};
 use std::ops::{Index, IndexMut};
 
@@ -133,7 +133,7 @@ impl<'a> Machine<'a> {
             }
         });
 
-        Self {
+        let mut machine = Self {
             registers: Registers::default(),
             memory: Memory(memory),
             ip: orig,
@@ -144,7 +144,26 @@ impl<'a> Machine<'a> {
             stdout: Box::new(write),
 
             memory_event_callbacks,
-        }
+        };
+
+        machine.load_basic_os();
+
+        machine
+    }
+
+    pub fn load_basic_os(&mut self) {
+
+        // GETC trap vector
+        self.set_memory_at(0x20, 0x0244);
+        self.set_span_at(0x0244, &[
+            LoadIndirect(Register::R0, 93.into()).encode() as i16,
+            Branch(DesiredConditionFlags{positive: true, zero: true, negative: false}, (-2).into()).encode() as i16,
+            LoadIndirect(Register::R0, 92.into()).encode() as i16,
+            ReturnFromInterrupt.encode() as i16,
+        ]);
+
+        self.set_memory_at(0x02A2, 0xFE00u16 as i16);
+        self.set_memory_at(0x02A3, 0xFE02u16 as i16);
     }
 
     // true => data set
@@ -396,21 +415,22 @@ impl<'a> Machine<'a> {
         // instead of implementing it within Rust
         match vec {
             // getc FIXME: this should not care for the new line at the end. It's more of a 'wait until pressed' kind of thing
-            0x20 => {
-                self.stdout.flush().unwrap();
-                let mut buf = [0u8; 1]; // only reads 1 ASCII char (7-bits)
-                self.stdin
-                    .read_exact(&mut buf)
-                    .expect("failed to read stdin");
-
-                *self.registers.get_mut(Register::R0) = buf[0] as i16;
-            }
+            // 0x20 => {
+            //     self.stdout.flush().unwrap();
+            //     let mut buf = [0u8; 1]; // only reads 1 ASCII char (7-bits)
+            //     self.stdin
+            //         .read_exact(&mut buf)
+            //         .expect("failed to read stdin");
+            //
+            //     *self.registers.get_mut(Register::R0) = buf[0] as i16;
+            // }
             // out
             0x21 => {
                 let r0 = self.registers.get(Register::R0);
                 self.stdout
                     .write_all(&[(r0 & 0b11111111) as u8])
                     .expect("Failed to write to stdout");
+                self.stdout.flush().expect("Failed to flush stdout");
             }
             // puts
             0x22 => {
@@ -428,7 +448,7 @@ impl<'a> Machine<'a> {
                 self.stdout.flush().expect("Failed to flush stdout");
             }
             // in
-            0x23 => todo!("putsp"),
+            0x23 => todo!("in"),
             // 0x24 putsp refer to ISA TODO
 
             // halt

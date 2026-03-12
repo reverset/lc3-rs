@@ -5,7 +5,7 @@
 .ORIG x0200
 
 LOOP    LDI R0, KBSR
-        BRz LOOP
+        BRzp LOOP
         LDI R0, KBDR
         OUT
         RTI
@@ -16,7 +16,8 @@ KBDR    .FILL   xFE02
 .END
 
 .ORIG x3000
-
+        GETC
+        OUT
         TRAP x0000
         HALT
 

@@ -97,7 +97,7 @@ fn main() -> std::io::Result<()> {
         _ => {
             println!(
                 "
-lc3-rs help
+lc3-cli help
 Subcommands:
     run <path>\t\t\t Run a assembled object file for the LC-3.
                 "
