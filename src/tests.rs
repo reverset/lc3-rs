@@ -1,7 +1,7 @@
-use super::*;
-use std::io::{BufReader, BufWriter};
+use std::io::BufWriter;
 
 use crate::vm::instructions::*;
+use crate::vm::machine::{Machine, PrivilegeMode};
 
 #[test]
 fn add_instr() {
@@ -365,19 +365,14 @@ fn hello_world_5() {
 
 #[test]
 fn test_getc() {
-    let data = [0b0000111u8; 1];
-    let input = BufReader::new(&data[..]);
-
-    let mut machine = Machine::new(
-        input,
-        std::io::stdout(),
-        0x3000,
+    let mut machine = Machine::new_std(
         &[Instruction::trap_get_c(), Instruction::trap_halt()],
     );
 
+    machine.set_keyboard_key('c' as u16);
     machine.run_until_halt();
 
-    assert_eq!(machine.registers.get(Register::R0), 0b0000111);
+    assert_eq!(machine.registers.get(Register::R0), 'c' as i16);
 }
 
 #[test]

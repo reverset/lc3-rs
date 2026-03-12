@@ -99,7 +99,7 @@ pub struct Machine<'a> {
 
     pub halted: bool,
 
-    pub stdin: Box<dyn Read + 'a>,
+    pub stdin: Box<dyn Read + 'a>, // TODO remove after implementing OS level TRAPs for in/out
     pub stdout: Box<dyn Write + 'a>,
 
     memory_event_callbacks: HashMap<u16, fn(&mut Self, MemoryModificationEvent)> // maybe a different data structure or hashing algorithm
