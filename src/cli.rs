@@ -6,6 +6,7 @@ use lc3::vm::machine::*;
 // use vm::machine::*;
 
 use core::panic;
+use std::io::Write;
 use std::path::Path;
 use std::time::Duration;
 
@@ -65,7 +66,7 @@ fn main() -> std::io::Result<()> {
             let ip = get_param(&args_ref, "pc", None).unwrap_or("3000".to_string());
             let ip = u16::from_str_radix(&ip, 16).expect("Invalid hex for starting instruction pointer/program counter position.");
             
-            let mut machine = Machine::new(std::io::stdin(), std::io::stdout(), ip, &[]);
+            let mut machine = Machine::new(ip, &[]);
 
             for datum in data {
                 let instrs: Vec<i16> = datum.data.iter().map(|x| *x as i16).collect();
@@ -74,7 +75,6 @@ fn main() -> std::io::Result<()> {
 
             crossterm::terminal::enable_raw_mode()?;
 
-            // machine.run_until_halt();
             while !machine.halted {
                 if crossterm::event::poll(Duration::ZERO)? {
                     let event = crossterm::event::read()?;
@@ -86,6 +86,13 @@ fn main() -> std::io::Result<()> {
                             machine.set_keyboard_key(char as u16);
                         }
                     }
+                }
+
+                if let Some(data) = machine.poll_display_data() {
+                    crossterm::terminal::disable_raw_mode()?; // lol, maybe dont do this?
+                    print!("{}", data as u8 as char);
+                    crossterm::terminal::enable_raw_mode()?;
+                    std::io::stdout().flush()?;
                 }
 
                 machine.step();

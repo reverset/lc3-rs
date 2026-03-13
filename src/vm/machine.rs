@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::bit_util::convert_str_to_i16_vec;
 use crate::vm::instructions::Instruction::{
     Add, AddImmediate, And, AndImmediate, Branch, Jump, JumpSubroutine, JumpSubroutineRegister,
@@ -6,7 +5,7 @@ use crate::vm::instructions::Instruction::{
     Store, StoreIndirect, StoreRegister, Trap,
 };
 use crate::vm::instructions::{DesiredConditionFlags, Instruction, Register, Registers};
-use std::io::{Read, Write};
+use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
 const KBSR: u16 = 0xFE00;
@@ -102,9 +101,6 @@ pub struct Machine<'a> {
 
     pub halted: bool,
 
-    pub stdin: Box<dyn Read + 'a>, // TODO remove after implementing OS level TRAPs for in/out
-    pub stdout: Box<dyn Write + 'a>,
-
     memory_event_callbacks: HashMap<u16, fn(&mut Self, MemoryModificationEvent)> // maybe a different data structure or hashing algorithm
 }
 
@@ -113,13 +109,11 @@ pub struct Machine<'a> {
 // that exactly one condition code is set at all times. I suppose Zero is a sensible default.
 #[allow(unused)]
 impl<'a> Machine<'a> {
-    pub fn new_std(instructions: &[Instruction]) -> Self {
-        Self::new(std::io::stdin(), std::io::stdout(), 0x3000, instructions)
+    pub fn new_x3000(instructions: &[Instruction]) -> Self {
+        Self::new(0x3000, instructions)
     }
 
     pub fn new(
-        read: impl Read + 'a,
-        write: impl Write + 'a,
         orig: u16,
         instructions: &[Instruction],
     ) -> Self {
@@ -135,8 +129,6 @@ impl<'a> Machine<'a> {
             condition_code: ConditionCode::Zero,
             privilege: PrivilegeMode::User,
             halted: false,
-            stdin: Box::new(read),
-            stdout: Box::new(write),
 
             memory_event_callbacks: HashMap::new(),
         };
@@ -195,16 +187,52 @@ impl<'a> Machine<'a> {
         self.set_memory_at(0x02A5, DDR as i16);
 
         self.set_display_status(true);
+
+        // PUTS trap vector
+
+        self.set_memory_at(0x22, 0x0250);
+        self.set_span_at(0x0250, &[
+            // push R0 onto stack
+            AddImmediate(Register::R6, Register::R6, (-1).into()).encode() as i16,
+            StoreRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
+
+            // push R1 onto stack
+            AddImmediate(Register::R6, Register::R6, (-1).into()).encode() as i16,
+            StoreRegister(Register::R1, Register::R6, (0).into()).encode() as i16,
+
+            // copy R0 to R1
+            AddImmediate(Register::R1, Register::R0, (0).into()).encode() as i16,
+
+            // load char
+            LoadRegister(Register::R0, Register::R1, 0.into()).encode() as i16,
+            // if zero we jump to end
+            Branch(DesiredConditionFlags{negative: false, zero: true, positive: false}, (3).into()).encode() as i16,
+            // otherwise we print first char
+            Instruction::trap_out().encode() as i16,
+            // update pointer to get address of next char
+            AddImmediate(Register::R1, Register::R1, (1).into()).encode() as i16,
+            // jump back up to load register
+            Branch(DesiredConditionFlags{negative: true, zero: true, positive: true}, (-5).into()).encode() as i16,
+
+            // after the loop
+            // pop off R1
+            LoadRegister(Register::R1, Register::R6, (0).into()).encode() as i16,
+            AddImmediate(Register::R6, Register::R6, (1).into()).encode() as i16,
+            // pop off R0
+            LoadRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
+            AddImmediate(Register::R6, Register::R6, (1).into()).encode() as i16,
+            ReturnFromInterrupt.encode() as i16,
+        ]);
     }
 
     // true => data set
     // false => flag cleared
     pub fn get_keyboard_status(&self) -> bool {
-        (self.memory[KBSR] >> 15) == 1
+        self.memory[KBSR] < 0
     }
 
     pub fn get_display_status(&self) -> bool {
-        (self.memory[DSR] >> 15) == 1
+        self.memory[DSR] < 0 // 15th bit is set
     }
 
     pub fn set_keyboard_key(&mut self, data: u16) -> bool {
@@ -223,7 +251,18 @@ impl<'a> Machine<'a> {
     }
 
     pub fn set_display_status(&mut self, ready: bool) {
-        self.memory[DSR] = (ready as i16) << 15;
+        let ready = ready as u16;
+        self.memory[DSR] = (self.memory[KBSR] & !(1 << 15)) | (ready << 15) as i16;
+    }
+
+    pub fn poll_display_data(&mut self) -> Option<u16> {
+        if !self.get_display_status() {
+            self.set_display_status(true);
+            let data = self.get_display_data();
+            Some(data)
+        } else {
+            None
+        }
     }
 
     pub fn set_privilege(&mut self, privilege: PrivilegeMode) {
@@ -461,49 +500,16 @@ impl<'a> Machine<'a> {
         // TODO, implement trap vectors in the Machine's instructions itself,
         // instead of implementing it within Rust
         match vec {
-            // getc FIXME: this should not care for the new line at the end. It's more of a 'wait until pressed' kind of thing
-            // 0x20 => {
-            //     self.stdout.flush().unwrap();
-            //     let mut buf = [0u8; 1]; // only reads 1 ASCII char (7-bits)
-            //     self.stdin
-            //         .read_exact(&mut buf)
-            //         .expect("failed to read stdin");
-            //
-            //     *self.registers.get_mut(Register::R0) = buf[0] as i16;
-            // }
-            // out
-            // 0x21 => {
-            //     let r0 = self.registers.get(Register::R0);
-            //     self.stdout
-            //         .write_all(&[(r0 & 0b11111111) as u8])
-            //         .expect("Failed to write to stdout");
-            //     self.stdout.flush().expect("Failed to flush stdout");
-            // }
-            // puts
-            0x22 => {
-                let mut addr = self.registers.get(Register::R0) as u16;
-
-                while self.get_memory_at(addr) != 0 {
-                    let char = self.get_memory_at(addr) as u8;
-
-                    self.stdout
-                        .write_all(&[char])
-                        .expect("Failed to write to stdout");
-
-                    addr += 1;
-                }
-                self.stdout.flush().expect("Failed to flush stdout");
-            }
-            // in
             0x23 => todo!("in"),
-            // 0x24 putsp refer to ISA TODO
+            0x24 => todo!("putsp"),
 
             // halt
-            0x25 => {
+            0x25 => { // technically this should modify the MCR, but whatever
                 self.halted = true;
             }
             vector => {
-                // this part is not implemented according to the ISA pdf
+                // this part is not implemented according to the ISA pdf,
+                // but rather the book 'Introduction To Computing Systems: From Bits & Gates To C/C++ & Beyond (3rd Edition)'
 
                 let psr = self.encode_psr();
 

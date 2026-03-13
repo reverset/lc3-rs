@@ -30,7 +30,7 @@ fn not_instr() {
 
 #[test]
 fn add_add() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::AddImmediate(Register::R0, Register::R1, 5.into()), // r0 = 5
         Instruction::AddImmediate(Register::R1, Register::R0, 5.into()), // r1 = 10
     ]);
@@ -44,7 +44,7 @@ fn add_add() {
 
 #[test]
 fn add_add_and() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::AddImmediate(Register::R0, Register::R1, 5.into()), // r0 = 5
         Instruction::AddImmediate(Register::R1, Register::R1, 5.into()), // r1 = 5
         Instruction::And(Register::R2, Register::R0, Register::R1),      // r2 = 5 (r0 & r1)
@@ -61,7 +61,7 @@ fn add_add_and() {
 
 #[test]
 fn add_not() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::AddImmediate(Register::R0, Register::R1, 5.into()), // r0 = 5
         Instruction::Not(Register::R1, Register::R0), // r2 = 1111111111111010 = -6 (!r0)
     ]);
@@ -75,7 +75,7 @@ fn add_not() {
 
 #[test]
 fn print_a() {
-    let mut machine = Machine::new_std(
+    let mut machine = Machine::new_x3000(
         &[
             // largest immediate we can do is 7
             // yes this can be condensed
@@ -102,7 +102,7 @@ fn print_a() {
 
 #[test]
 fn check_branching() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::AddImmediate(Register::R0, Register::R1, 7.into()), // r0 = 7 // flag = p
         Instruction::Branch(0b001.into(), 1.into()), // check if positive, then skip over the next instruction
         Instruction::trap_halt(),
@@ -113,7 +113,7 @@ fn check_branching() {
 
     assert_eq!(machine.registers.get(Register::R0), 14);
 
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::AddImmediate(Register::R0, Register::R1, 7.into()), // r0 = 7 // flag = p
         Instruction::Branch(0b110.into(), 1.into()), // check if negative or zero (false), so we don't jump
         Instruction::trap_halt(),
@@ -124,7 +124,7 @@ fn check_branching() {
 
     assert_eq!(machine.registers.get(Register::R0), 7);
 
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::Branch(0b111.into(), (-1).into()), // check if negative or zero (false), so we don't jump
     ]);
 
@@ -146,7 +146,7 @@ fn check_branch_bits() {
 
 #[test]
 fn check_jmp() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::AddImmediate(Register::R0, Register::R1, 4.into()), // r0 = 4
         Instruction::Jump(Register::R0),                                 // jmp to 4 (r0 = 4)
         Instruction::trap_halt(), // this should not happen since we jumped over it
@@ -160,7 +160,7 @@ fn check_jmp() {
 
 #[test]
 fn check_ld() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::Load(Register::R0, (-2).into()), // r0 = 50 (see code after this)
         Instruction::trap_halt(),
     ]);
@@ -173,12 +173,8 @@ fn check_ld() {
 
 #[test]
 fn hello_world() {
-    let mut output = BufWriter::new(Vec::new());
 
-    let mut machine = Machine::new(
-        std::io::stdin(),
-        &mut output,
-        0x3000,
+    let mut machine = Machine::new_x3000(
         &[
             Instruction::LoadEffectiveAddress(Register::R0, 2.into()), // r0 = text_addr
             Instruction::trap_puts(), // print string stored at address in r0
@@ -190,19 +186,15 @@ fn hello_world() {
     let text_addr = 0x3003;
     machine.string_set(text_addr, text);
 
-    machine.run_until_halt();
+    // machine.run_until_halt();
+    let out = run_given_in_out(&mut machine, &[]);
 
-    drop(machine);
-
-    assert_eq!(
-        String::from_utf8(output.into_inner().unwrap()).unwrap(),
-        text
-    );
+    assert_eq!(out, text);
 }
 
 #[test]
 fn check_ldi() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::LoadIndirect(Register::R0, (-2).into()), // r0 = 20 (load value stored at the address stored in ip offset -2)
         Instruction::trap_halt(),
     ]);
@@ -216,7 +208,7 @@ fn check_ldi() {
 
 #[test]
 fn check_ldr() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::Load(Register::R0, (-2).into()),
         Instruction::LoadRegister(Register::R1, Register::R0, 0.into()),
         Instruction::LoadRegister(Register::R2, Register::R0, 1.into()),
@@ -235,7 +227,7 @@ fn check_ldr() {
 
 #[test]
 fn check_jsr() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::JumpSubroutine(3.into()),
         Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
         Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
@@ -254,7 +246,7 @@ fn check_jsr() {
 
 #[test]
 fn check_jsrr() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::Load(Register::R1, (-2).into()),
         Instruction::JumpSubroutineRegister(Register::R1),
         Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
@@ -277,7 +269,7 @@ fn check_jsrr() {
 
 #[test]
 fn check_st() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
         Instruction::Store(Register::R0, (-3).into()),
         Instruction::trap_halt(),
@@ -290,7 +282,7 @@ fn check_st() {
 
 #[test]
 fn check_sti() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
         Instruction::StoreIndirect(Register::R0, (-3).into()),
         Instruction::trap_halt(),
@@ -305,7 +297,7 @@ fn check_sti() {
 
 #[test]
 fn check_str() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::Load(Register::R0, (-2).into()),
         Instruction::AddImmediate(Register::R1, Register::R5, 5.into()),
         Instruction::AddImmediate(Register::R2, Register::R5, 6.into()),
@@ -325,12 +317,7 @@ fn check_str() {
 #[test]
 fn hello_world_5() {
     // adapted from https://github.com/paul-nameless/lc3-asm/blob/master/tests/hello2.asm
-    let mut output = BufWriter::new(Vec::new());
-
-    let mut machine = Machine::new(
-        std::io::stdin(),
-        &mut output,
-        0x3000,
+    let mut machine = Machine::new_x3000(
         &[
             Instruction::LoadEffectiveAddress(Register::R0, 5.into()),
             Instruction::Load(Register::R1, 19.into()),
@@ -345,18 +332,17 @@ fn hello_world_5() {
     machine.string_set(0x3006, text);
     machine.set_memory_at(1 + 0x3006 + (text.len() as u16), 5); // 1 + ... because of null byte
 
-    machine.run_until_halt();
-    drop(machine);
+    let out = run_given_in_out(&mut machine, &[]);
 
     assert_eq!(
-        String::from_utf8(output.into_inner().unwrap()).unwrap(),
+        out,
         text.repeat(5)
     );
 }
 
 #[test]
 fn test_getc() {
-    let mut machine = Machine::new_std(
+    let mut machine = Machine::new_x3000(
         &[Instruction::trap_get_c(), Instruction::trap_halt()],
     );
 
@@ -368,7 +354,7 @@ fn test_getc() {
 
 #[test]
 fn stacks() {
-    let mut machine = Machine::new_std(&[]);
+    let mut machine = Machine::new_x3000(&[]);
 
     machine.stack_push(2);
     machine.stack_push(9);
@@ -399,7 +385,7 @@ fn stacks() {
 
 #[test]
 fn test_out() {
-    let mut machine = Machine::new_std(&[
+    let mut machine = Machine::new_x3000(&[
         Instruction::Load(Register::R0, (3).into()),
         Instruction::trap_out(),
         Instruction::trap_halt(),
@@ -408,4 +394,25 @@ fn test_out() {
     machine.set_memory_at(0x3004, 'l' as i16);
     machine.run_until_halt();
     assert_eq!(machine.get_display_data(), 'l' as u16);
+}
+
+pub fn run_given_in_out(machine: &mut Machine, input: &[u8]) -> String {
+    let mut buf = String::new();
+
+    let mut input_pointer = 0;
+
+    while !machine.halted {
+        // update input
+        if input_pointer < input.len() && machine.set_keyboard_key(input[input_pointer] as u16) {
+            input_pointer += 1;
+        }
+        
+        // read output
+        if let Some(data) = machine.poll_display_data() { // data has been set if status is NOT ready
+            let chara = (data as u8) as char;
+            buf += chara.to_string().as_str();
+        }
+        machine.step();
+    }
+    buf
 }

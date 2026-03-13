@@ -69,8 +69,8 @@ pub fn read(data: &[u8]) -> AssemblyInfo {
 #[cfg(test)] // TODO fix input with new keyboard system
 mod tests {
     use crate::io::read_complex::read;
+    use crate::tests;
     use crate::vm::machine::Machine;
-    use std::io::BufWriter;
 
     #[test]
     fn read_hello() {
@@ -205,31 +205,15 @@ LINE | ADDR | SOURCE
 
         let asm_info = read(bytes);
 
-
-        // let mut input = BufReader::new(&input_buf[..]);
-        let mut output = BufWriter::new(Vec::new());
-
-        let mut machine = Machine::new(std::io::stdin(), &mut output, 0x3000, &[]);
+        let mut machine = Machine::new_x3000(&[]);
 
         for datum in asm_info.data {
             let instrs: Vec<i16> = datum.data.iter().map(|x| *x as i16).collect();
             machine.set_span_at(datum.orig, &instrs[..]);
         }
 
-        let input_buf: [u16; 2] = ['5' as u16, '\n' as u16];
-        let mut next_input: usize = 0;
-        // machine.run_until_halt();
-        while !machine.halted {
-            if next_input < input_buf.len() && machine.set_keyboard_key(input_buf[next_input]) {
-                next_input = next_input + 1;
-            }
-            machine.step();
-        }
+        let out = tests::run_given_in_out(&mut machine, &['5' as u8]);
 
-        drop(machine);
-
-        let output = output.into_inner().unwrap();
-        let res = String::from_utf8(output).unwrap();
-        assert_eq!(res, format!("How many times (1 char please) (0..=9): {}", "Hello, World!\n".repeat(5)));
+        assert_eq!(out, format!("How many times (1 char please) (0..=9): {}", "Hello, World!\n".repeat(5)));
     }
 }
