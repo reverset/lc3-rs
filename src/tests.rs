@@ -75,12 +75,7 @@ fn add_not() {
 
 #[test]
 fn print_a() {
-    let mut output = BufWriter::new(Vec::new());
-
-    let mut machine = Machine::new(
-        std::io::stdin(),
-        &mut output,
-        0x3000,
+    let mut machine = Machine::new_std(
         &[
             // largest immediate we can do is 7
             // yes this can be condensed
@@ -101,12 +96,8 @@ fn print_a() {
     );
 
     machine.run_until_halt();
-    drop(machine);
 
-    let buf = output.into_inner().unwrap();
-    let output = String::from_utf8(buf).unwrap();
-
-    assert_eq!(output, "A");
+    assert_eq!(machine.get_display_data(), 'A' as u16);
 }
 
 #[test]
@@ -404,4 +395,17 @@ fn stacks() {
     assert_eq!(machine.registers.get(Register::R6), 0x3000);
     machine.set_privilege(PrivilegeMode::User);
     assert_eq!(machine.registers.get(Register::R6), (0xFE00u16) as i16);
+}
+
+#[test]
+fn test_out() {
+    let mut machine = Machine::new_std(&[
+        Instruction::Load(Register::R0, (3).into()),
+        Instruction::trap_out(),
+        Instruction::trap_halt(),
+    ]);
+
+    machine.set_memory_at(0x3004, 'l' as i16);
+    machine.run_until_halt();
+    assert_eq!(machine.get_display_data(), 'l' as u16);
 }

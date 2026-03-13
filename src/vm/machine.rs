@@ -12,6 +12,9 @@ use std::ops::{Index, IndexMut};
 const KBSR: u16 = 0xFE00;
 const KBDR: u16 = 0xFE02;
 
+const DSR: u16 = 0xFE04;
+const DDR: u16 = 0xFE06;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConditionCode {
     // hmm i thought there was a carry flag
@@ -125,14 +128,6 @@ impl<'a> Machine<'a> {
             memory.push(inst.encode() as i16);
         }
 
-        let mut memory_event_callbacks: HashMap<u16, fn(&mut Self, MemoryModificationEvent)> = HashMap::new();
-
-        memory_event_callbacks.insert(KBDR, |machine, event| {
-            if let MemoryModificationEvent::Read(_) = event {
-                machine.memory[KBSR] &= !(1 << 15); // clear 15th bit
-            }
-        });
-
         let mut machine = Self {
             registers: Registers::default(),
             memory: Memory(memory),
@@ -143,7 +138,7 @@ impl<'a> Machine<'a> {
             stdin: Box::new(read),
             stdout: Box::new(write),
 
-            memory_event_callbacks,
+            memory_event_callbacks: HashMap::new(),
         };
 
         machine.load_basic_os();
@@ -152,6 +147,18 @@ impl<'a> Machine<'a> {
     }
 
     pub fn load_basic_os(&mut self) {
+        // automatically reset status bit after a read
+        self.add_io_callback(KBDR, |machine, event| {
+            if let MemoryModificationEvent::Read(_) = event {
+                machine.memory[KBSR] &= !(1 << 15); // clear 15th bit
+            }
+        });
+
+        self.add_io_callback(DDR, |machine, event| {
+            if let MemoryModificationEvent::Write(_) = event {
+                machine.memory[DSR] &= !(1 << 15); // clear 15th bit
+            }
+        });
 
         // GETC trap vector
         self.set_memory_at(0x20, 0x0244);
@@ -162,8 +169,32 @@ impl<'a> Machine<'a> {
             ReturnFromInterrupt.encode() as i16,
         ]);
 
-        self.set_memory_at(0x02A2, 0xFE00u16 as i16);
-        self.set_memory_at(0x02A3, 0xFE02u16 as i16);
+
+        self.set_memory_at(0x02A2, KBSR as i16);
+        self.set_memory_at(0x02A3, KBDR as i16);
+
+        // OUT trap vector
+        self.set_memory_at(0x21, 0x0248);
+        self.set_span_at(0x0248, &[
+            // move stack pointer
+            AddImmediate(Register::R6, Register::R6, (-1).into()).encode() as i16,
+            // push R0 onto stack
+            StoreRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
+            // load DSR into R0
+            LoadIndirect(Register::R0, (0x02A4 - (0x0248 + 2) - 1).into()).encode() as i16,
+            Branch(DesiredConditionFlags{negative: false, zero: true, positive: true}, (-2).into()).encode() as i16,
+            // pop data from stack
+            LoadRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
+            AddImmediate(Register::R6, Register::R6, (1).into()).encode() as i16,
+
+            StoreIndirect(Register::R0, (0x02A5 - (0x0248 + 6) - 1).into()).encode() as i16,
+            ReturnFromInterrupt.encode() as i16,
+        ]);
+
+        self.set_memory_at(0x02A4, DSR as i16);
+        self.set_memory_at(0x02A5, DDR as i16);
+
+        self.set_display_status(true);
     }
 
     // true => data set
@@ -172,11 +203,27 @@ impl<'a> Machine<'a> {
         (self.memory[KBSR] >> 15) == 1
     }
 
-    pub fn set_keyboard_key(&mut self, data: u16) {
+    pub fn get_display_status(&self) -> bool {
+        (self.memory[DSR] >> 15) == 1
+    }
+
+    pub fn set_keyboard_key(&mut self, data: u16) -> bool {
         if self.memory[KBSR] == 0 { // we may not set the KBDR if this flag isn't cleared
             self.memory[KBDR] = data as i16;
             self.memory[KBSR] |= (1 << 15); // 15th bit is set.
+
+            true
+        } else {
+            false
         }
+    }
+
+    pub fn get_display_data(&self) -> u16 {
+        self.memory[DDR] as u16
+    }
+
+    pub fn set_display_status(&mut self, ready: bool) {
+        self.memory[DSR] = (ready as i16) << 15;
     }
 
     pub fn set_privilege(&mut self, privilege: PrivilegeMode) {
@@ -425,13 +472,13 @@ impl<'a> Machine<'a> {
             //     *self.registers.get_mut(Register::R0) = buf[0] as i16;
             // }
             // out
-            0x21 => {
-                let r0 = self.registers.get(Register::R0);
-                self.stdout
-                    .write_all(&[(r0 & 0b11111111) as u8])
-                    .expect("Failed to write to stdout");
-                self.stdout.flush().expect("Failed to flush stdout");
-            }
+            // 0x21 => {
+            //     let r0 = self.registers.get(Register::R0);
+            //     self.stdout
+            //         .write_all(&[(r0 & 0b11111111) as u8])
+            //         .expect("Failed to write to stdout");
+            //     self.stdout.flush().expect("Failed to flush stdout");
+            // }
             // puts
             0x22 => {
                 let mut addr = self.registers.get(Register::R0) as u16;
