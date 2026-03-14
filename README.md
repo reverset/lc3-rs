@@ -47,15 +47,14 @@ Output of the above program:
 |     STI     |      ✅      |
 |     STR     |      ✅      |
 |    *TRAP    |      ✅      |
-| **reserved  |      ❌      |
+| **reserved  |      ✅      |
 
 \* not all standard TRAP vectors are implemented
 <br>
-** reserved causes an exception when used, which is not implemented yet
+** reserved causes an exception when used (which is handled by the OS, and the behavior can be changed by modifying the interrupt vector and/or its implementation)
 
 # Missing features
 - Interrupt processing (🚧 in progress)
 - `putsp` TRAP vector
 - 0xFFFE Machine control register
-- Privilege mode exception (RTI invoked in User mode)
 - And likely a few more things

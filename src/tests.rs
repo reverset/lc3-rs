@@ -394,6 +394,28 @@ fn test_out() {
     assert_eq!(machine.get_display_data(), 'l' as u16);
 }
 
+#[test]
+fn test_reserved() {
+    let mut machine = Machine::new_x3000(&[
+        Instruction::Reserved,
+        Instruction::trap_halt(),
+    ]);
+
+    let out = run_given_in_out(&mut machine, &[]);
+    assert_eq!(out, "[exc] Illegal opcode\n");
+}
+
+#[test]
+fn test_invalid_privilege() {
+    let mut machine = Machine::new_x3000(&[
+        Instruction::ReturnFromInterrupt,
+        Instruction::trap_halt(),
+    ]);
+
+    let out = run_given_in_out(&mut machine, &[]);
+    assert_eq!(out, "[exc] invalid privilege\n");
+}
+
 pub fn run_given_in_out(machine: &mut Machine, input: &[u8]) -> String {
     let mut buf = String::new();
 

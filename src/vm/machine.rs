@@ -15,6 +15,10 @@ const DSR: u16 = 0xFE04;
 const DDR: u16 = 0xFE06;
 const PSR: u16 = 0xFFFC;
 
+const PRIVILEGE_EXC: u8 = 0x0;
+const ILLEGAL_OPCODE_EXC: u8 = 0x1;
+const ACV_EXC: u8 = 0x2; // illegal access to protected memory
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConditionCode {
     Negative,
@@ -140,6 +144,22 @@ impl<'a> Machine<'a> {
     }
 
     pub fn load_basic_os(&mut self) {
+        self.set_memory_at(0x0100 + ILLEGAL_OPCODE_EXC as u16, 0x0200);
+        self.set_span_at(0x0200, &[
+            LoadEffectiveAddress(Register::R0, (2).into()).encode() as i16,
+            Instruction::trap_puts().encode() as i16,
+            Instruction::trap_halt().encode() as i16,
+        ]);
+        self.string_set(0x0203, "[exc] Illegal opcode\n\0");
+
+        self.set_memory_at(0x0100 + PRIVILEGE_EXC as u16, 0x219);
+        self.set_span_at(0x219, &[
+            LoadEffectiveAddress(Register::R0, (2).into()).encode() as i16,
+            Instruction::trap_puts().encode() as i16,
+            Instruction::trap_halt().encode() as i16,
+        ]);
+        self.string_set(0x21c, "[exc] invalid privilege\n\0");
+
         // automatically reset status bit after a read
         self.add_io_callback(KBDR, |machine, event| {
             if let MemoryModificationEvent::Read(_) = event {
@@ -321,6 +341,14 @@ impl<'a> Machine<'a> {
         address >= 0xFE00
     }
 
+    pub fn is_address_in_system_section(&self, address: u16) -> bool {
+        address <= 0x2FFF
+    }
+
+    pub fn is_address_protected(&self, address: u16) -> bool {
+        self.is_address_in_io_section(address) || self.is_address_in_system_section(address)
+    }
+
     // Set data in the IO section of memory (0xFE00 to 0xFFFF)
     // index is the offset from 0xFE00. 0 to 511
     pub fn set_device_data(&mut self, index: u16, data: i16) {
@@ -352,6 +380,11 @@ impl<'a> Machine<'a> {
     }
 
     pub fn get_memory_at(&mut self, index: u16) -> i16 {
+        if self.privilege == PrivilegeMode::User && self.is_address_protected(index) {
+            // self.interrupt(ACV_EXC);
+            // TODO exception (this function will need to return a result i suppose?)
+        }
+
         if index == PSR {
             return self.encode_psr() as i16;
         }
@@ -527,7 +560,7 @@ impl<'a> Machine<'a> {
 
                     self.decode_psr(psr);
                 } else {
-                    todo!("privilege mode exception");
+                    self.interrupt(PRIVILEGE_EXC, 7);
                 }
             }
 
@@ -552,7 +585,7 @@ impl<'a> Machine<'a> {
 
             Trap(vector) => self.handle_trap(vector),
 
-            Reserved => todo!("reserved not implemented"),
+            Reserved => self.interrupt(ILLEGAL_OPCODE_EXC, 7),
         }
     }
 
