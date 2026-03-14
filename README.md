@@ -54,15 +54,8 @@ Output of the above program:
 ** reserved causes an exception when used, which is not implemented yet
 
 # Missing features
-- Interrupt processing
+- Interrupt processing (🚧 in progress)
 - `putsp` TRAP vector
-- Device register assignments, namely:
-  - 0xFE00 Keyboard status
-  - 0xFE02 Keyboard data
-  - 0xFE04 Display status
-  - 0xFE06 Display data
-  - 0xFFFE Machine control
-- Priority level (0-7) (stored in PSR)
+- 0xFFFE Machine control register
 - Privilege mode exception (RTI invoked in User mode)
-- MCR (Machine control register)
 - And likely a few more things

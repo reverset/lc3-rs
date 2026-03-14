@@ -13,6 +13,7 @@ const KBDR: u16 = 0xFE02;
 
 const DSR: u16 = 0xFE04;
 const DDR: u16 = 0xFE06;
+const PSR: u16 = 0xFFFC;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConditionCode {
@@ -93,10 +94,10 @@ pub struct Machine<'a> {
     pub ip: u16, // LC-3 is word addressable.
 
     // perhaps separate this into a PSR struct
-    // TODO include process priority
     // include interrupt enable bit?
     pub condition_code: ConditionCode,
     pub privilege: PrivilegeMode,
+    pub priority: u8,
 
     pub halted: bool,
 
@@ -127,6 +128,7 @@ impl<'a> Machine<'a> {
             ip: orig,
             condition_code: ConditionCode::Zero,
             privilege: PrivilegeMode::User,
+            priority: 0,
             halted: false,
 
             memory_event_callbacks: HashMap::new(),
@@ -144,6 +146,8 @@ impl<'a> Machine<'a> {
                 machine.memory[KBSR] &= !(1 << 15); // clear 15th bit
             }
         });
+
+        self.set_keyboard_interrupts(true);
 
         self.add_io_callback(DDR, |machine, event| {
             if let MemoryModificationEvent::Write(_) = event {
@@ -224,6 +228,32 @@ impl<'a> Machine<'a> {
         ]);
     }
 
+    pub fn interrupt(&mut self, vector: u8, urgency: u8) {
+        if urgency < self.priority {
+            return;
+        }
+
+        let vector = (vector as u16) + 0x0100;
+
+        let addr = self.get_memory_at(vector);
+        if addr == 0 {
+            return;
+        }
+
+        // kinda duplicated code, maybe fix
+        let psr = self.encode_psr();
+
+        self.set_privilege(PrivilegeMode::Supervisor);
+        self.priority = urgency;
+
+        let pc = self.ip;
+
+        self.stack_push(psr as i16);
+        self.stack_push(pc as i16);
+
+        self.ip = addr as u16;
+    }
+
     // true => data set
     // false => flag cleared
     pub fn get_keyboard_status(&self) -> bool {
@@ -235,14 +265,28 @@ impl<'a> Machine<'a> {
     }
 
     pub fn set_keyboard_key(&mut self, data: u16) -> bool {
-        if self.memory[KBSR] == 0 { // we may not set the KBDR if this flag isn't cleared
+        if !self.get_keyboard_status() {
             self.memory[KBDR] = data as i16;
             self.memory[KBSR] |= (1 << 15); // 15th bit is set.
+
+            if self.get_keyboard_interrupt_enable_bit() {
+                self.interrupt(0x80, 4);
+            }
 
             true
         } else {
             false
         }
+    }
+
+    pub fn get_keyboard_interrupt_enable_bit(&self) -> bool {
+        ((self.memory[KBSR] >> 14) & 0b1) == 1
+    }
+
+    pub fn set_keyboard_interrupts(&mut self, enable: bool) {
+        let mask = ((enable as i16) & 0b1) << 14;
+        self.memory[KBSR] &= !mask;
+        self.memory[KBSR] |= mask;
     }
 
     pub fn get_display_data(&self) -> u16 {
@@ -252,6 +296,10 @@ impl<'a> Machine<'a> {
     pub fn set_display_status(&mut self, ready: bool) {
         let ready = ready as u16;
         self.memory[DSR] = (self.memory[KBSR] & !(1 << 15)) | (ready << 15) as i16;
+    }
+
+    pub fn get_display_interrupt_enable_bit(&self) -> bool {
+        ((self.memory[DSR] >> 14) & 0b1) == 1
     }
 
     pub fn poll_display_data(&mut self) -> Option<u16> {
@@ -291,6 +339,11 @@ impl<'a> Machine<'a> {
     }
 
     pub fn set_memory_at(&mut self, index: u16, value: i16) {
+        if index == PSR {
+            self.decode_psr(value as u16);
+            return;
+        }
+
         self.memory[index] = value;
 
         if self.is_address_in_io_section(index) {
@@ -299,6 +352,10 @@ impl<'a> Machine<'a> {
     }
 
     pub fn get_memory_at(&mut self, index: u16) -> i16 {
+        if index == PSR {
+            return self.encode_psr() as i16;
+        }
+
         let val = self.memory[index];
 
         if self.is_address_in_io_section(index) {
@@ -343,6 +400,8 @@ impl<'a> Machine<'a> {
 
         res |= (cond_codes & 0b111) as u16;
 
+        res |= (self.priority as u16 & 0b111) << 8;
+
         res
     }
 
@@ -355,6 +414,8 @@ impl<'a> Machine<'a> {
         }
 
         let cond_codes = psr & 0b111;
+        self.priority = ((psr >> 8) & 0b111) as u8;
+
         self.condition_code = match cond_codes {
             0b100 => ConditionCode::Negative,
             0b010 => ConditionCode::Zero,
