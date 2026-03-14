@@ -2,10 +2,15 @@ LC-3 OBJ FILE
 
 .TEXT
 3000
-68
-E019
+74
+E01E
 F022
 F020
+F021
+1220
+2043
+F021
+1060
 243F
 1202
 0404
@@ -71,14 +76,16 @@ F025
 0020
 0000
 FFD0
+000A
 
 .SYMBOL
 ADDR | EXT | LABEL
-3007 |   0 | LOOP
-300A |   0 | END
-300B |   0 | HELLO
-301A |   0 | PROMPT
-3043 |   0 | NUM_OFFSET
+300C |   0 | LOOP
+300F |   0 | END
+3010 |   0 | HELLO
+301F |   0 | PROMPT
+3048 |   0 | NUM_OFFSET
+3049 |   0 | NEWLINE
 
 .LINKER_INFO
 
@@ -86,11 +93,12 @@ ADDR | EXT | LABEL
 # DEBUG SYMBOLS FOR LC3TOOLS
 
 LABEL      | INDEX
-LOOP       |   125
-END        |   161
-HELLO      |   171
-PROMPT     |   204
-NUM_OFFSET |   264
+LOOP       |   178
+END        |   214
+HELLO      |   224
+PROMPT     |   263
+NUM_OFFSET |   328
+NEWLINE    |   351
 ====================
 LINE | ADDR | SOURCE
    0 | ???? | .orig x3000\n
@@ -100,24 +108,30 @@ LINE | ADDR | SOURCE
    4 | 3000 | LEA R0, PROMPT\n
    5 | 3001 | PUTS\n
    6 | 3002 | GETC\n
-   7 | ???? | \n
-   8 | 3003 | LD R2, NUM_OFFSET\n
-   9 | 3004 | ADD R1, R0, R2\n
-  10 | ???? | \n
-  11 | 3005 | BRz END\n
+   7 | 3003 | OUT\n
+   8 | 3004 | ADD R1, R0, #0\n
+   9 | 3005 | LD R0, NEWLINE\n
+  10 | 3006 | OUT\n
+  11 | 3007 | ADD R0, R1, #0\n
   12 | ???? | \n
-  13 | 3006 | LEA R0, HELLO ; another comment\n
-  14 | 3007 | LOOP PUTS\n
-  15 | 3008 | ADD R1, R1, #-1\n
-  16 | 3009 | BRp LOOP\n
+  13 | 3008 | LD R2, NUM_OFFSET\n
+  14 | 3009 | ADD R1, R0, R2\n
+  15 | ???? | \n
+  16 | 300A | BRz END\n
   17 | ???? | \n
-  18 | ???? | END\n
-  19 | 300A | HALT\n
-  20 | ???? | \n
-  21 | 300B | HELLO .stringz \"Hello, World!\\n\"\n
-  22 | 301A | PROMPT .stringz \"How many times (1 char please) (0..=9): \"\n
-  23 | ???? | \n
-  24 | 3043 | NUM_OFFSET .fill #-48\n
+  18 | 300B | LEA R0, HELLO ; another comment\n
+  19 | 300C | LOOP PUTS\n
+  20 | 300D | ADD R1, R1, #-1\n
+  21 | 300E | BRp LOOP\n
+  22 | ???? | \n
+  23 | ???? | END\n
+  24 | 300F | HALT\n
   25 | ???? | \n
-  26 | ???? | .end
+  26 | 3010 | HELLO       .stringz \"Hello, World!\\n\"\n
+  27 | 301F | PROMPT      .stringz \"How many times (1 char please) (0..=9): \"\n
+  28 | ???? | \n
+  29 | 3048 | NUM_OFFSET  .fill #-48\n
+  30 | 3049 | NEWLINE     .fill x0A\n
+  31 | ???? | \n
+  32 | ???? | .end
 ====================

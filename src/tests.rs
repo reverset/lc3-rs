@@ -1,5 +1,3 @@
-use std::io::BufWriter;
-
 use crate::vm::instructions::*;
 use crate::vm::machine::{Machine, PrivilegeMode};
 

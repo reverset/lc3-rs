@@ -16,7 +16,6 @@ const DDR: u16 = 0xFE06;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConditionCode {
-    // hmm i thought there was a carry flag
     Negative,
     Zero,
     Positive,
