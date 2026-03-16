@@ -73,25 +73,23 @@ fn add_not() {
 
 #[test]
 fn print_a() {
-    let mut machine = Machine::new_x3000(
-        &[
-            // largest immediate we can do is 7
-            // yes this can be condensed
-            Instruction::AddImmediate(Register::R0, Register::R1, 7.into()), // r0 = 7
-            Instruction::AddImmediate(Register::R1, Register::R1, 7.into()), // r1 = 7
-            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (14)
-            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (21)
-            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (28)
-            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (35)
-            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (42)
-            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (49)
-            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (56)
-            Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (63)
-            Instruction::AddImmediate(Register::R0, Register::R0, 2.into()), // r0 = r0 + 2 (65, 'A' in ASCII)
-            Instruction::trap_out(),                                         // print r0
-            Instruction::trap_halt(),
-        ],
-    );
+    let mut machine = Machine::new_x3000(&[
+        // largest immediate we can do is 7
+        // yes this can be condensed
+        Instruction::AddImmediate(Register::R0, Register::R1, 7.into()), // r0 = 7
+        Instruction::AddImmediate(Register::R1, Register::R1, 7.into()), // r1 = 7
+        Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (14)
+        Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (21)
+        Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (28)
+        Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (35)
+        Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (42)
+        Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (49)
+        Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (56)
+        Instruction::Add(Register::R0, Register::R0, Register::R1),      // r0 = r0 + r1 (63)
+        Instruction::AddImmediate(Register::R0, Register::R0, 2.into()), // r0 = r0 + 2 (65, 'A' in ASCII)
+        Instruction::trap_out(),                                         // print r0
+        Instruction::trap_halt(),
+    ]);
 
     machine.run_until_halt();
 
@@ -171,14 +169,11 @@ fn check_ld() {
 
 #[test]
 fn hello_world() {
-
-    let mut machine = Machine::new_x3000(
-        &[
-            Instruction::LoadEffectiveAddress(Register::R0, 2.into()), // r0 = text_addr
-            Instruction::trap_puts(), // print string stored at address in r0
-            Instruction::trap_halt(),
-        ],
-    );
+    let mut machine = Machine::new_x3000(&[
+        Instruction::LoadEffectiveAddress(Register::R0, 2.into()), // r0 = text_addr
+        Instruction::trap_puts(), // print string stored at address in r0
+        Instruction::trap_halt(),
+    ]);
 
     let text = "Hello, world!\n";
     let text_addr = 0x3003;
@@ -315,16 +310,14 @@ fn check_str() {
 #[test]
 fn hello_world_5() {
     // adapted from https://github.com/paul-nameless/lc3-asm/blob/master/tests/hello2.asm
-    let mut machine = Machine::new_x3000(
-        &[
-            Instruction::LoadEffectiveAddress(Register::R0, 5.into()),
-            Instruction::Load(Register::R1, 19.into()),
-            Instruction::trap_puts(),
-            Instruction::AddImmediate(Register::R1, Register::R1, (-1).into()),
-            Instruction::Branch(0b001.into(), (-3).into()),
-            Instruction::trap_halt(),
-        ],
-    );
+    let mut machine = Machine::new_x3000(&[
+        Instruction::LoadEffectiveAddress(Register::R0, 5.into()),
+        Instruction::Load(Register::R1, 19.into()),
+        Instruction::trap_puts(),
+        Instruction::AddImmediate(Register::R1, Register::R1, (-1).into()),
+        Instruction::Branch(0b001.into(), (-3).into()),
+        Instruction::trap_halt(),
+    ]);
 
     let text = "Hello, World!\n";
     machine.string_set(0x3006, text);
@@ -332,17 +325,12 @@ fn hello_world_5() {
 
     let out = run_given_in_out(&mut machine, &[]);
 
-    assert_eq!(
-        out,
-        text.repeat(5)
-    );
+    assert_eq!(out, text.repeat(5));
 }
 
 #[test]
 fn test_getc() {
-    let mut machine = Machine::new_x3000(
-        &[Instruction::trap_get_c(), Instruction::trap_halt()],
-    );
+    let mut machine = Machine::new_x3000(&[Instruction::trap_get_c(), Instruction::trap_halt()]);
 
     machine.set_keyboard_key('c' as u16);
     machine.run_until_halt();
@@ -396,10 +384,7 @@ fn test_out() {
 
 #[test]
 fn test_reserved() {
-    let mut machine = Machine::new_x3000(&[
-        Instruction::Reserved,
-        Instruction::trap_halt(),
-    ]);
+    let mut machine = Machine::new_x3000(&[Instruction::Reserved, Instruction::trap_halt()]);
 
     let out = run_given_in_out(&mut machine, &[]);
     assert_eq!(out, "[exc] Illegal opcode\n");
@@ -407,10 +392,8 @@ fn test_reserved() {
 
 #[test]
 fn test_invalid_privilege() {
-    let mut machine = Machine::new_x3000(&[
-        Instruction::ReturnFromInterrupt,
-        Instruction::trap_halt(),
-    ]);
+    let mut machine =
+        Machine::new_x3000(&[Instruction::ReturnFromInterrupt, Instruction::trap_halt()]);
 
     let out = run_given_in_out(&mut machine, &[]);
     assert_eq!(out, "[exc] invalid privilege\n");
@@ -426,9 +409,10 @@ pub fn run_given_in_out(machine: &mut Machine, input: &[u8]) -> String {
         if input_pointer < input.len() && machine.set_keyboard_key(input[input_pointer] as u16) {
             input_pointer += 1;
         }
-        
+
         // read output
-        if let Some(data) = machine.poll_display_data() { // data has been set if status is NOT ready
+        if let Some(data) = machine.poll_display_data() {
+            // data has been set if status is NOT ready
             let chara = (data as u8) as char;
             buf += chara.to_string().as_str();
         }

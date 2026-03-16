@@ -29,8 +29,9 @@ pub enum ConditionCode {
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PrivilegeMode {
     Supervisor,
-    
-    #[default] User,
+
+    #[default]
+    User,
 }
 
 impl PrivilegeMode {
@@ -49,40 +50,22 @@ impl ConditionCode {
     }
 }
 
-pub struct Memory(Vec<i16>);
-
-impl Memory {
-    pub fn resize(&mut self, size: usize, val: i16) {
-        self.0.resize(size, val);
-    }
-
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn ensure_space(&mut self, index: u16) {
-        if index as usize >= self.len() {
-            self.resize(index as usize + 1, 0);
-        }
-    }
-}
+pub struct Memory(HashMap<u16, i16>);
 
 impl Index<u16> for Memory {
     type Output = i16;
 
     fn index(&self, index: u16) -> &Self::Output {
-        if index as usize >= self.len() {
-            &0
-        } else {
-            self.0.index(index as usize)
-        }
+        self.0.get(&index).unwrap_or(&0)
     }
 }
 
 impl IndexMut<u16> for Memory {
     fn index_mut(&mut self, index: u16) -> &mut Self::Output {
-        self.ensure_space(index);
-        &mut self.0[index as usize]
+        if !self.0.contains_key(&index) {
+            self.0.insert(index, 0);
+        }
+        self.0.get_mut(&index).expect("key")
     }
 }
 
@@ -105,7 +88,7 @@ pub struct Machine<'a> {
 
     pub halted: bool,
 
-    memory_event_callbacks: HashMap<u16, fn(&mut Self, MemoryModificationEvent)> // maybe a different data structure or hashing algorithm
+    memory_event_callbacks: HashMap<u16, fn(&mut Self, MemoryModificationEvent)>, // maybe a different data structure or hashing algorithm
 }
 
 // Not sure if the condition code should start as the Zero flag.
@@ -117,13 +100,15 @@ impl<'a> Machine<'a> {
         Self::new(0x3000, instructions)
     }
 
-    pub fn new(
-        orig: u16,
-        instructions: &[Instruction],
-    ) -> Self {
-        let mut memory = Vec::from_iter((0..orig).map(|_| 0));
-        for inst in instructions {
-            memory.push(inst.encode() as i16);
+    pub fn new(orig: u16, instructions: &[Instruction]) -> Self {
+        // let mut memory = Vec::from_iter((0..orig).map(|_| 0));
+        // for inst in instructions {
+        //     memory.push(inst.encode() as i16);
+        // }
+
+        let mut memory = HashMap::new();
+        for (i, instruction) in instructions.iter().enumerate() {
+            memory.insert(orig + i as u16, instruction.encode() as i16);
         }
 
         let mut machine = Self {
@@ -145,19 +130,25 @@ impl<'a> Machine<'a> {
 
     pub fn load_basic_os(&mut self) {
         self.set_memory_at(0x0100 + ILLEGAL_OPCODE_EXC as u16, 0x0200);
-        self.set_span_at(0x0200, &[
-            LoadEffectiveAddress(Register::R0, (2).into()).encode() as i16,
-            Instruction::trap_puts().encode() as i16,
-            Instruction::trap_halt().encode() as i16,
-        ]);
+        self.set_span_at(
+            0x0200,
+            &[
+                LoadEffectiveAddress(Register::R0, (2).into()).encode() as i16,
+                Instruction::trap_puts().encode() as i16,
+                Instruction::trap_halt().encode() as i16,
+            ],
+        );
         self.string_set(0x0203, "[exc] Illegal opcode\n\0");
 
         self.set_memory_at(0x0100 + PRIVILEGE_EXC as u16, 0x219);
-        self.set_span_at(0x219, &[
-            LoadEffectiveAddress(Register::R0, (2).into()).encode() as i16,
-            Instruction::trap_puts().encode() as i16,
-            Instruction::trap_halt().encode() as i16,
-        ]);
+        self.set_span_at(
+            0x219,
+            &[
+                LoadEffectiveAddress(Register::R0, (2).into()).encode() as i16,
+                Instruction::trap_puts().encode() as i16,
+                Instruction::trap_halt().encode() as i16,
+            ],
+        );
         self.string_set(0x21c, "[exc] invalid privilege\n\0");
 
         // automatically reset status bit after a read
@@ -177,34 +168,54 @@ impl<'a> Machine<'a> {
 
         // GETC trap vector
         self.set_memory_at(0x20, 0x0244);
-        self.set_span_at(0x0244, &[
-            LoadIndirect(Register::R0, 93.into()).encode() as i16,
-            Branch(DesiredConditionFlags{positive: true, zero: true, negative: false}, (-2).into()).encode() as i16,
-            LoadIndirect(Register::R0, 92.into()).encode() as i16,
-            ReturnFromInterrupt.encode() as i16,
-        ]);
-
+        self.set_span_at(
+            0x0244,
+            &[
+                LoadIndirect(Register::R0, 93.into()).encode() as i16,
+                Branch(
+                    DesiredConditionFlags {
+                        positive: true,
+                        zero: true,
+                        negative: false,
+                    },
+                    (-2).into(),
+                )
+                .encode() as i16,
+                LoadIndirect(Register::R0, 92.into()).encode() as i16,
+                ReturnFromInterrupt.encode() as i16,
+            ],
+        );
 
         self.set_memory_at(0x02A2, KBSR as i16);
         self.set_memory_at(0x02A3, KBDR as i16);
 
         // OUT trap vector
         self.set_memory_at(0x21, 0x0248);
-        self.set_span_at(0x0248, &[
-            // move stack pointer
-            AddImmediate(Register::R6, Register::R6, (-1).into()).encode() as i16,
-            // push R0 onto stack
-            StoreRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
-            // load DSR into R0
-            LoadIndirect(Register::R0, (0x02A4 - (0x0248 + 2) - 1).into()).encode() as i16,
-            Branch(DesiredConditionFlags{negative: false, zero: true, positive: true}, (-2).into()).encode() as i16,
-            // pop data from stack
-            LoadRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
-            AddImmediate(Register::R6, Register::R6, (1).into()).encode() as i16,
-
-            StoreIndirect(Register::R0, (0x02A5 - (0x0248 + 6) - 1).into()).encode() as i16,
-            ReturnFromInterrupt.encode() as i16,
-        ]);
+        self.set_span_at(
+            0x0248,
+            &[
+                // move stack pointer
+                AddImmediate(Register::R6, Register::R6, (-1).into()).encode() as i16,
+                // push R0 onto stack
+                StoreRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
+                // load DSR into R0
+                LoadIndirect(Register::R0, (0x02A4 - (0x0248 + 2) - 1).into()).encode() as i16,
+                Branch(
+                    DesiredConditionFlags {
+                        negative: false,
+                        zero: true,
+                        positive: true,
+                    },
+                    (-2).into(),
+                )
+                .encode() as i16,
+                // pop data from stack
+                LoadRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
+                AddImmediate(Register::R6, Register::R6, (1).into()).encode() as i16,
+                StoreIndirect(Register::R0, (0x02A5 - (0x0248 + 6) - 1).into()).encode() as i16,
+                ReturnFromInterrupt.encode() as i16,
+            ],
+        );
 
         self.set_memory_at(0x02A4, DSR as i16);
         self.set_memory_at(0x02A5, DDR as i16);
@@ -214,38 +225,53 @@ impl<'a> Machine<'a> {
         // PUTS trap vector
 
         self.set_memory_at(0x22, 0x0250);
-        self.set_span_at(0x0250, &[
-            // push R0 onto stack
-            AddImmediate(Register::R6, Register::R6, (-1).into()).encode() as i16,
-            StoreRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
-
-            // push R1 onto stack
-            AddImmediate(Register::R6, Register::R6, (-1).into()).encode() as i16,
-            StoreRegister(Register::R1, Register::R6, (0).into()).encode() as i16,
-
-            // copy R0 to R1
-            AddImmediate(Register::R1, Register::R0, (0).into()).encode() as i16,
-
-            // load char
-            LoadRegister(Register::R0, Register::R1, 0.into()).encode() as i16,
-            // if zero we jump to end
-            Branch(DesiredConditionFlags{negative: false, zero: true, positive: false}, (3).into()).encode() as i16,
-            // otherwise we print first char
-            Instruction::trap_out().encode() as i16,
-            // update pointer to get address of next char
-            AddImmediate(Register::R1, Register::R1, (1).into()).encode() as i16,
-            // jump back up to load register
-            Branch(DesiredConditionFlags{negative: true, zero: true, positive: true}, (-5).into()).encode() as i16,
-
-            // after the loop
-            // pop off R1
-            LoadRegister(Register::R1, Register::R6, (0).into()).encode() as i16,
-            AddImmediate(Register::R6, Register::R6, (1).into()).encode() as i16,
-            // pop off R0
-            LoadRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
-            AddImmediate(Register::R6, Register::R6, (1).into()).encode() as i16,
-            ReturnFromInterrupt.encode() as i16,
-        ]);
+        self.set_span_at(
+            0x0250,
+            &[
+                // push R0 onto stack
+                AddImmediate(Register::R6, Register::R6, (-1).into()).encode() as i16,
+                StoreRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
+                // push R1 onto stack
+                AddImmediate(Register::R6, Register::R6, (-1).into()).encode() as i16,
+                StoreRegister(Register::R1, Register::R6, (0).into()).encode() as i16,
+                // copy R0 to R1
+                AddImmediate(Register::R1, Register::R0, (0).into()).encode() as i16,
+                // load char
+                LoadRegister(Register::R0, Register::R1, 0.into()).encode() as i16,
+                // if zero we jump to end
+                Branch(
+                    DesiredConditionFlags {
+                        negative: false,
+                        zero: true,
+                        positive: false,
+                    },
+                    (3).into(),
+                )
+                .encode() as i16,
+                // otherwise we print first char
+                Instruction::trap_out().encode() as i16,
+                // update pointer to get address of next char
+                AddImmediate(Register::R1, Register::R1, (1).into()).encode() as i16,
+                // jump back up to load register
+                Branch(
+                    DesiredConditionFlags {
+                        negative: true,
+                        zero: true,
+                        positive: true,
+                    },
+                    (-5).into(),
+                )
+                .encode() as i16,
+                // after the loop
+                // pop off R1
+                LoadRegister(Register::R1, Register::R6, (0).into()).encode() as i16,
+                AddImmediate(Register::R6, Register::R6, (1).into()).encode() as i16,
+                // pop off R0
+                LoadRegister(Register::R0, Register::R6, (0).into()).encode() as i16,
+                AddImmediate(Register::R6, Register::R6, (1).into()).encode() as i16,
+                ReturnFromInterrupt.encode() as i16,
+            ],
+        );
     }
 
     pub fn interrupt(&mut self, vector: u8, urgency: u8) {
@@ -357,7 +383,9 @@ impl<'a> Machine<'a> {
     }
 
     pub fn invoke_io_event(&mut self, address: u16, event: MemoryModificationEvent) {
-        let Some(callback) = self.memory_event_callbacks.get(&address) else { return; };
+        let Some(callback) = self.memory_event_callbacks.get(&address) else {
+            return;
+        };
 
         callback(self, event);
     }
@@ -454,7 +482,10 @@ impl<'a> Machine<'a> {
             0b010 => ConditionCode::Zero,
             0b001 => ConditionCode::Positive,
 
-            _ => panic!("invalid condition code found in SSP while decoding new PSR. {:03b}", cond_codes),
+            _ => panic!(
+                "invalid condition code found in SSP while decoding new PSR. {:03b}",
+                cond_codes
+            ),
         }
     }
 
@@ -552,7 +583,6 @@ impl<'a> Machine<'a> {
             }
 
             // RET is just JMP
-
             ReturnFromInterrupt => {
                 if self.privilege.is_supervisor() {
                     self.ip = self.stack_pop() as u16;
@@ -597,7 +627,8 @@ impl<'a> Machine<'a> {
             0x24 => todo!("putsp"),
 
             // halt
-            0x25 => { // technically this should modify the MCR, but whatever
+            0x25 => {
+                // technically this should modify the MCR, but whatever
                 self.halted = true;
             }
             vector => {
@@ -613,10 +644,9 @@ impl<'a> Machine<'a> {
                 self.stack_push(psr as i16);
                 self.stack_push(pc as i16);
 
-
                 let desired = self.memory[vector as u16];
                 self.ip = desired as u16;
-            },
+            }
         }
     }
 

@@ -12,7 +12,8 @@ pub struct DataInfo {
 }
 
 #[derive(Debug)]
-pub struct AssemblyInfo { // TODO, debug info, linker info, etc
+pub struct AssemblyInfo {
+    // TODO, debug info, linker info, etc
     pub data: Vec<DataInfo>,
 }
 

@@ -20,7 +20,8 @@ fn get_section(line: &str) -> ObjectFileSection {
 }
 
 pub fn read(data: &[u8]) -> AssemblyInfo {
-    let data = String::from_utf8(data.to_vec()).expect("File contained invalid UTF-8, even though header stated LC-3 OBJ FILE");
+    let data = String::from_utf8(data.to_vec())
+        .expect("File contained invalid UTF-8, even though header stated LC-3 OBJ FILE");
     // let mut instructions = vec![];
 
     let mut section = ObjectFileSection::None;
@@ -53,17 +54,19 @@ pub fn read(data: &[u8]) -> AssemblyInfo {
                     } else {
                         let orig = u16::from_str_radix(&line, 16).unwrap();
                         data_sections.push(DataInfo { orig, data: vec![] });
-                        orig_length = lines[i+1].parse::<u16>().unwrap();
+                        orig_length = lines[i + 1].parse::<u16>().unwrap();
                         skip_next = true;
                     }
                 }
-                
+
                 // TODO
                 _ => (),
             }
         }
     }
-    AssemblyInfo { data: data_sections }
+    AssemblyInfo {
+        data: data_sections,
+    }
 }
 
 #[cfg(test)] // TODO fix input with new keyboard system
@@ -74,7 +77,7 @@ mod tests {
 
     #[test]
     fn read_hello() {
-         let program = r#"
+        let program = r#"
 LC-3 OBJ FILE
 
 .TEXT
@@ -214,6 +217,12 @@ LINE | ADDR | SOURCE
 
         let out = tests::run_given_in_out(&mut machine, &['5' as u8]);
 
-        assert_eq!(out, format!("How many times (1 char please) (0..=9): {}", "Hello, World!\n".repeat(5)));
+        assert_eq!(
+            out,
+            format!(
+                "How many times (1 char please) (0..=9): {}",
+                "Hello, World!\n".repeat(5)
+            )
+        );
     }
 }

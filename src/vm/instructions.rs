@@ -565,8 +565,9 @@ impl From<u8> for Register {
 
 impl Registers {
     pub fn get(&self, i: Register) -> i16 {
-        if i == Register::R6 { // maybe cleanup idk
-             match self.mode {
+        if i == Register::R6 {
+            // maybe cleanup idk
+            match self.mode {
                 PrivilegeMode::Supervisor => self.ssp,
                 PrivilegeMode::User => self.usp,
             }
@@ -574,7 +575,6 @@ impl Registers {
             let i: usize = i.into();
             self.reg[i]
         }
-
     }
 
     pub fn get_mut(&mut self, i: Register) -> &mut i16 {

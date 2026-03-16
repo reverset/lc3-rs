@@ -42,10 +42,10 @@ fn get_flag(args: &[&str], long: &str, short: Option<&str>) -> bool {
 
 fn get_param(args: &[&str], long: &str, short: Option<&str>) -> Option<String> {
     if let Some(pos) = get_position(args, long, short) {
-        if pos+1 >= args.len() {
+        if pos + 1 >= args.len() {
             panic!("--{long}/-{short:?} requires an input after.");
         }
-        Some(args[pos+1].to_string())
+        Some(args[pos + 1].to_string())
     } else {
         None
     }
@@ -62,10 +62,11 @@ fn main() -> std::io::Result<()> {
         }
         [_, "run", path, ..] => {
             let AssemblyInfo { data } = io::read_file(Path::new(path));
-            
+
             let ip = get_param(&args_ref, "pc", None).unwrap_or("3000".to_string());
-            let ip = u16::from_str_radix(&ip, 16).expect("Invalid hex for starting instruction pointer/program counter position.");
-            
+            let ip = u16::from_str_radix(&ip, 16)
+                .expect("Invalid hex for starting instruction pointer/program counter position.");
+
             let mut machine = Machine::new(ip, &[]);
 
             for datum in data {
@@ -80,7 +81,9 @@ fn main() -> std::io::Result<()> {
                     let event = crossterm::event::read()?;
 
                     if let Some(key_event) = event.as_key_event() {
-                        if key_event.code == KeyCode::Char('c') && key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                        if key_event.code == KeyCode::Char('c')
+                            && key_event.modifiers.contains(KeyModifiers::CONTROL)
+                        {
                             break;
                         } else if let Some(char) = key_event.code.as_char() {
                             machine.set_keyboard_key(char as u16);
@@ -111,7 +114,6 @@ Subcommands:
             );
         }
     }
-
 
     Ok(())
 }
