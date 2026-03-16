@@ -8,7 +8,7 @@ const LC3_OBJ_HEADER: &[u8] = b"LC-3 OBJ FILE";
 #[derive(Debug)]
 pub struct DataInfo {
     pub orig: u16,
-    pub data: Vec<u16>,
+    pub data: Vec<i16>,
 }
 
 #[derive(Debug)]

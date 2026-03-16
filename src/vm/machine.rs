@@ -394,6 +394,14 @@ impl<'a> Machine<'a> {
         self.memory_event_callbacks.insert(address, func);
     }
 
+    pub fn set_memory_at_unchecked(&mut self, address: u16, value: i16) {
+        self.memory[address] = value;
+    }
+
+    pub fn get_memory_at_unchecked(&mut self, address: u16) -> i16 {
+        self.memory[address]
+    }
+
     pub fn set_memory_at(&mut self, index: u16, value: i16) {
         if index == PSR {
             self.decode_psr(value as u16);

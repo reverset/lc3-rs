@@ -50,7 +50,7 @@ pub fn read(data: &[u8]) -> AssemblyInfo {
                         orig_length -= 1;
 
                         let val = u16::from_str_radix(&line, 16).unwrap();
-                        data_sections.last_mut().unwrap().data.push(val);
+                        data_sections.last_mut().unwrap().data.push(val as i16);
                     } else {
                         let orig = u16::from_str_radix(&line, 16).unwrap();
                         data_sections.push(DataInfo { orig, data: vec![] });

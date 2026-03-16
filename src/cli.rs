@@ -70,8 +70,7 @@ fn main() -> std::io::Result<()> {
             let mut machine = Machine::new(ip, &[]);
 
             for datum in data {
-                let instrs: Vec<i16> = datum.data.iter().map(|x| *x as i16).collect();
-                machine.set_span_at(datum.orig, &instrs[..]);
+                machine.set_span_at(datum.orig, &datum.data);
             }
 
             crossterm::terminal::enable_raw_mode()?;
