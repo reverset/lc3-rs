@@ -26,8 +26,8 @@ Output of the above program:
 - https://www.cs.utexas.edu/~fussell/courses/cs310h/lectures/Lecture_10-310h.pdf
 - https://acg.cis.upenn.edu/milom/cse240-Fall05/handouts/Ch09-a.pdf
 
-
-## Instructions
+## Virtual Machine
+### Instructions
 | Instruction | Implemented |
 |:-----------:|:-----------:|
 |     ADD     |      ✅      |
@@ -52,6 +52,17 @@ Output of the above program:
 \* not all standard TRAP vectors are implemented
 <br>
 ** reserved causes an exception when used (which is handled by the OS, and the behavior can be changed by modifying the interrupt vector and/or its implementation)
+
+### Other VM features
+| Feature                                          | Status |
+|:------------------------------------------------:|:------:|
+| Interrupts/Exceptions                            | ✅     |
+| *Memory Protection                               | ✅     |
+| Memory Device IO Callbacks for external bindings | ✅     |
+| Keyboard status and data register                | ✅     |
+| Display status and data register                 | ✅     |
+
+* Memory protection relies on how the interrupt is handled. If the default OS is removed, strange behavior may occur if not handled correctly.
 
 # Missing features
 - `putsp` TRAP vector

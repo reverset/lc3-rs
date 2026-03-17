@@ -6,6 +6,7 @@ use crate::vm::instructions::Instruction::{
 };
 use crate::vm::instructions::{DesiredConditionFlags, Instruction, Register, Registers};
 use std::collections::HashMap;
+use std::collections::hash_map::Keys;
 use std::ops::{Index, IndexMut};
 
 const KBSR: u16 = 0xFE00;
@@ -56,6 +57,12 @@ impl ConditionCode {
 }
 
 pub struct Memory(HashMap<u16, i16>);
+
+impl Memory {
+    fn entries(&self) -> Keys<'_, u16, i16> {
+        self.0.keys()
+    }
+}
 
 impl Index<u16> for Memory {
     type Output = i16;
