@@ -20,11 +20,10 @@ Output of the above program:
 | C Compiler      | soon™️                              |
 
 ## References
-- https://www.jmeiners.com/lc3-vm/supplies/lc3-isa.pdf (best source)
+- Introduction To Computing Systems: From Bits & Gates To C/C++ & Beyond (3rd Edition)
+- https://www.jmeiners.com/lc3-vm/supplies/lc3-isa.pdf (pretty good source)
 
 - https://en.wikipedia.org/wiki/Little_Computer_3 (A little inaccurate, and missing key information)
-- https://www.cs.utexas.edu/~fussell/courses/cs310h/lectures/Lecture_10-310h.pdf
-- https://acg.cis.upenn.edu/milom/cse240-Fall05/handouts/Ch09-a.pdf
 
 ## Virtual Machine
 ### Instructions
