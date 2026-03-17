@@ -54,7 +54,6 @@ Output of the above program:
 ** reserved causes an exception when used (which is handled by the OS, and the behavior can be changed by modifying the interrupt vector and/or its implementation)
 
 # Missing features
-- Interrupt processing (🚧 in progress)
 - `putsp` TRAP vector
 - 0xFFFE Machine control register
 - And likely a few more things

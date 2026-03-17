@@ -67,7 +67,7 @@ fn main() -> std::io::Result<()> {
             let ip = u16::from_str_radix(&ip, 16)
                 .expect("Invalid hex for starting instruction pointer/program counter position.");
 
-            let mut machine = Machine::new(ip, &[]);
+            let mut machine = Machine::new(ip, true, &[]);
 
             for datum in data {
                 machine.set_span_at(datum.orig, &datum.data);

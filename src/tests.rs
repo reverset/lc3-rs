@@ -156,12 +156,16 @@ fn check_jmp() {
 
 #[test]
 fn check_ld() {
-    let mut machine = Machine::new_x3000(&[
-        Instruction::Load(Register::R0, (-2).into()), // r0 = 50 (see code after this)
-        Instruction::trap_halt(),
-    ]);
+    let mut machine = Machine::new(
+        0x3000,
+        false,
+        &[
+            Instruction::Load(Register::R0, (-2).into()), // r0 = 50 (see code after this)
+            Instruction::trap_halt(),
+        ],
+    );
 
-    machine.set_memory_at(0x3000 - 1, 50);
+    machine.set_memory_at_unchecked(0x3000 - 1, 50);
     machine.run_until_halt();
 
     assert_eq!(machine.registers.get(Register::R0), 50);
@@ -187,13 +191,17 @@ fn hello_world() {
 
 #[test]
 fn check_ldi() {
-    let mut machine = Machine::new_x3000(&[
-        Instruction::LoadIndirect(Register::R0, (-2).into()), // r0 = 20 (load value stored at the address stored in ip offset -2)
-        Instruction::trap_halt(),
-    ]);
+    let mut machine = Machine::new(
+        0x3000,
+        false,
+        &[
+            Instruction::LoadIndirect(Register::R0, (-2).into()), // r0 = 20 (load value stored at the address stored in ip offset -2)
+            Instruction::trap_halt(),
+        ],
+    );
 
-    machine.set_memory_at(1, 20);
-    machine.set_memory_at(0x3000 - 1, 1);
+    machine.set_memory_at_unchecked(1, 20);
+    machine.set_memory_at_unchecked(0x3000 - 1, 1);
     machine.run_until_halt();
 
     assert_eq!(machine.registers.get(Register::R0), 20);
@@ -201,15 +209,19 @@ fn check_ldi() {
 
 #[test]
 fn check_ldr() {
-    let mut machine = Machine::new_x3000(&[
-        Instruction::Load(Register::R0, (-2).into()),
-        Instruction::LoadRegister(Register::R1, Register::R0, 0.into()),
-        Instruction::LoadRegister(Register::R2, Register::R0, 1.into()),
-        Instruction::LoadRegister(Register::R3, Register::R0, 2.into()),
-        Instruction::trap_halt(),
-    ]);
+    let mut machine = Machine::new(
+        0x3000,
+        false,
+        &[
+            Instruction::Load(Register::R0, (-2).into()),
+            Instruction::LoadRegister(Register::R1, Register::R0, 0.into()),
+            Instruction::LoadRegister(Register::R2, Register::R0, 1.into()),
+            Instruction::LoadRegister(Register::R3, Register::R0, 2.into()),
+            Instruction::trap_halt(),
+        ],
+    );
 
-    machine.set_memory_at(0x3000 - 1, 10);
+    machine.set_memory_at_unchecked(0x3000 - 1, 10);
     machine.set_span_at(10, &[1, 2, 3]);
     machine.run_until_halt();
 
@@ -239,17 +251,21 @@ fn check_jsr() {
 
 #[test]
 fn check_jsrr() {
-    let mut machine = Machine::new_x3000(&[
-        Instruction::Load(Register::R1, (-2).into()),
-        Instruction::JumpSubroutineRegister(Register::R1),
-        Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
-        Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
-        Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
-        Instruction::AddImmediate(Register::R0, Register::R2, 5.into()),
-        Instruction::trap_halt(),
-    ]);
+    let mut machine = Machine::new(
+        0x3000,
+        false,
+        &[
+            Instruction::Load(Register::R1, (-2).into()),
+            Instruction::JumpSubroutineRegister(Register::R1),
+            Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
+            Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
+            Instruction::AddImmediate(Register::R5, Register::R0, 1.into()),
+            Instruction::AddImmediate(Register::R0, Register::R2, 5.into()),
+            Instruction::trap_halt(),
+        ],
+    );
 
-    machine.set_memory_at(0x3000 - 1, 0x3005);
+    machine.set_memory_at_unchecked(0x3000 - 1, 0x3005);
     machine.step();
     machine.step();
     machine.step();
@@ -262,11 +278,15 @@ fn check_jsrr() {
 
 #[test]
 fn check_st() {
-    let mut machine = Machine::new_x3000(&[
-        Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
-        Instruction::Store(Register::R0, (-3).into()),
-        Instruction::trap_halt(),
-    ]);
+    let mut machine = Machine::new(
+        0x3000,
+        false,
+        &[
+            Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
+            Instruction::Store(Register::R0, (-3).into()),
+            Instruction::trap_halt(),
+        ],
+    );
 
     machine.run_until_halt();
 
@@ -275,13 +295,17 @@ fn check_st() {
 
 #[test]
 fn check_sti() {
-    let mut machine = Machine::new_x3000(&[
-        Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
-        Instruction::StoreIndirect(Register::R0, (-3).into()),
-        Instruction::trap_halt(),
-    ]);
+    let mut machine = Machine::new(
+        0x3000,
+        false,
+        &[
+            Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
+            Instruction::StoreIndirect(Register::R0, (-3).into()),
+            Instruction::trap_halt(),
+        ],
+    );
 
-    machine.set_memory_at(0x3000 - 1, 0x2000);
+    machine.set_memory_at_unchecked(0x3000 - 1, 0x2000);
 
     machine.run_until_halt();
 
@@ -290,16 +314,20 @@ fn check_sti() {
 
 #[test]
 fn check_str() {
-    let mut machine = Machine::new_x3000(&[
-        Instruction::Load(Register::R0, (-2).into()),
-        Instruction::AddImmediate(Register::R1, Register::R5, 5.into()),
-        Instruction::AddImmediate(Register::R2, Register::R5, 6.into()),
-        Instruction::StoreRegister(Register::R1, Register::R0, 0.into()),
-        Instruction::StoreRegister(Register::R2, Register::R0, 1.into()),
-        Instruction::trap_halt(),
-    ]);
+    let mut machine = Machine::new(
+        0x3000,
+        false,
+        &[
+            Instruction::Load(Register::R0, (-2).into()),
+            Instruction::AddImmediate(Register::R1, Register::R5, 5.into()),
+            Instruction::AddImmediate(Register::R2, Register::R5, 6.into()),
+            Instruction::StoreRegister(Register::R1, Register::R0, 0.into()),
+            Instruction::StoreRegister(Register::R2, Register::R0, 1.into()),
+            Instruction::trap_halt(),
+        ],
+    );
 
-    machine.set_memory_at(0x3000 - 1, 0x2000);
+    machine.set_memory_at_unchecked(0x3000 - 1, 0x2000);
 
     machine.run_until_halt();
 
@@ -321,7 +349,7 @@ fn hello_world_5() {
 
     let text = "Hello, World!\n";
     machine.string_set(0x3006, text);
-    machine.set_memory_at(1 + 0x3006 + (text.len() as u16), 5); // 1 + ... because of null byte
+    machine.set_memory_at_unchecked(1 + 0x3006 + (text.len() as u16), 5); // 1 + ... because of null byte
 
     let out = run_given_in_out(&mut machine, &[]);
 
@@ -377,7 +405,7 @@ fn test_out() {
         Instruction::trap_halt(),
     ]);
 
-    machine.set_memory_at(0x3004, 'l' as i16);
+    machine.set_memory_at_unchecked(0x3004, 'l' as i16);
     machine.run_until_halt();
     assert_eq!(machine.get_display_data(), 'l' as u16);
 }
@@ -397,6 +425,17 @@ fn test_invalid_privilege() {
 
     let out = run_given_in_out(&mut machine, &[]);
     assert_eq!(out, "[exc] invalid privilege\n");
+}
+
+#[test]
+fn test_illegal_memory_access() {
+    let mut machine = Machine::new_x3000(&[
+        Instruction::Store(Register::R0, (-2).into()),
+        Instruction::trap_halt(),
+    ]);
+
+    let out = run_given_in_out(&mut machine, &[]);
+    assert_eq!(out, "[exc] ACV\n");
 }
 
 pub fn run_given_in_out(machine: &mut Machine, input: &[u8]) -> String {

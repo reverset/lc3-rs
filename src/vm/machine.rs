@@ -19,6 +19,11 @@ const PRIVILEGE_EXC: u8 = 0x0;
 const ILLEGAL_OPCODE_EXC: u8 = 0x1;
 const ACV_EXC: u8 = 0x2; // illegal access to protected memory
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Lc3Error {
+    IllegalMemoryAccess(u16),
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConditionCode {
     Negative,
@@ -62,10 +67,7 @@ impl Index<u16> for Memory {
 
 impl IndexMut<u16> for Memory {
     fn index_mut(&mut self, index: u16) -> &mut Self::Output {
-        if !self.0.contains_key(&index) {
-            self.0.insert(index, 0);
-        }
-        self.0.get_mut(&index).expect("key")
+        self.0.entry(index).or_insert(0)
     }
 }
 
@@ -87,6 +89,7 @@ pub struct Machine<'a> {
     pub priority: u8,
 
     pub halted: bool,
+    pub protect_memory: bool,
 
     memory_event_callbacks: HashMap<u16, fn(&mut Self, MemoryModificationEvent)>, // maybe a different data structure or hashing algorithm
 }
@@ -97,10 +100,10 @@ pub struct Machine<'a> {
 #[allow(unused)]
 impl<'a> Machine<'a> {
     pub fn new_x3000(instructions: &[Instruction]) -> Self {
-        Self::new(0x3000, instructions)
+        Self::new(0x3000, true, instructions)
     }
 
-    pub fn new(orig: u16, instructions: &[Instruction]) -> Self {
+    pub fn new(pc: u16, protect_memory: bool, instructions: &[Instruction]) -> Self {
         // let mut memory = Vec::from_iter((0..orig).map(|_| 0));
         // for inst in instructions {
         //     memory.push(inst.encode() as i16);
@@ -108,17 +111,18 @@ impl<'a> Machine<'a> {
 
         let mut memory = HashMap::new();
         for (i, instruction) in instructions.iter().enumerate() {
-            memory.insert(orig + i as u16, instruction.encode() as i16);
+            memory.insert(pc + i as u16, instruction.encode() as i16);
         }
 
         let mut machine = Self {
             registers: Registers::default(),
             memory: Memory(memory),
-            ip: orig,
+            ip: pc,
             condition_code: ConditionCode::Zero,
             privilege: PrivilegeMode::User,
             priority: 0,
             halted: false,
+            protect_memory,
 
             memory_event_callbacks: HashMap::new(),
         };
@@ -129,7 +133,7 @@ impl<'a> Machine<'a> {
     }
 
     pub fn load_basic_os(&mut self) {
-        self.set_memory_at(0x0100 + ILLEGAL_OPCODE_EXC as u16, 0x0200);
+        self.set_memory_at_unchecked(0x0100 + ILLEGAL_OPCODE_EXC as u16, 0x0200);
         self.set_span_at(
             0x0200,
             &[
@@ -140,7 +144,7 @@ impl<'a> Machine<'a> {
         );
         self.string_set(0x0203, "[exc] Illegal opcode\n\0");
 
-        self.set_memory_at(0x0100 + PRIVILEGE_EXC as u16, 0x219);
+        self.set_memory_at_unchecked(0x0100 + PRIVILEGE_EXC as u16, 0x219);
         self.set_span_at(
             0x219,
             &[
@@ -150,6 +154,17 @@ impl<'a> Machine<'a> {
             ],
         );
         self.string_set(0x21c, "[exc] invalid privilege\n\0");
+
+        self.set_memory_at_unchecked(0x0100 + ACV_EXC as u16, 0x235);
+        self.set_span_at(
+            0x235,
+            &[
+                LoadEffectiveAddress(Register::R0, (2).into()).encode() as i16,
+                Instruction::trap_puts().encode() as i16,
+                Instruction::trap_halt().encode() as i16,
+            ],
+        );
+        self.string_set(0x238, "[exc] ACV\n\0");
 
         // automatically reset status bit after a read
         self.add_io_callback(KBDR, |machine, event| {
@@ -167,7 +182,7 @@ impl<'a> Machine<'a> {
         });
 
         // GETC trap vector
-        self.set_memory_at(0x20, 0x0244);
+        self.set_memory_at_unchecked(0x20, 0x0244);
         self.set_span_at(
             0x0244,
             &[
@@ -186,11 +201,11 @@ impl<'a> Machine<'a> {
             ],
         );
 
-        self.set_memory_at(0x02A2, KBSR as i16);
-        self.set_memory_at(0x02A3, KBDR as i16);
+        self.set_memory_at_unchecked(0x02A2, KBSR as i16);
+        self.set_memory_at_unchecked(0x02A3, KBDR as i16);
 
         // OUT trap vector
-        self.set_memory_at(0x21, 0x0248);
+        self.set_memory_at_unchecked(0x21, 0x0248);
         self.set_span_at(
             0x0248,
             &[
@@ -217,14 +232,14 @@ impl<'a> Machine<'a> {
             ],
         );
 
-        self.set_memory_at(0x02A4, DSR as i16);
-        self.set_memory_at(0x02A5, DDR as i16);
+        self.set_memory_at_unchecked(0x02A4, DSR as i16);
+        self.set_memory_at_unchecked(0x02A5, DDR as i16);
 
         self.set_display_status(true);
 
         // PUTS trap vector
 
-        self.set_memory_at(0x22, 0x0250);
+        self.set_memory_at_unchecked(0x22, 0x0250);
         self.set_span_at(
             0x0250,
             &[
@@ -281,7 +296,7 @@ impl<'a> Machine<'a> {
 
         let vector = (vector as u16) + 0x0100;
 
-        let addr = self.get_memory_at(vector);
+        let addr = self.get_memory_at_unchecked(vector);
         if addr == 0 {
             return;
         }
@@ -402,10 +417,17 @@ impl<'a> Machine<'a> {
         self.memory[address]
     }
 
-    pub fn set_memory_at(&mut self, index: u16, value: i16) {
+    pub fn set_memory_at(&mut self, index: u16, value: i16) -> Result<(), Lc3Error> {
+        if self.protect_memory
+            && self.privilege == PrivilegeMode::User
+            && self.is_address_protected(index)
+        {
+            return Err(Lc3Error::IllegalMemoryAccess(index));
+        }
+
         if index == PSR {
             self.decode_psr(value as u16);
-            return;
+            return Ok(());
         }
 
         self.memory[index] = value;
@@ -413,16 +435,20 @@ impl<'a> Machine<'a> {
         if self.is_address_in_io_section(index) {
             self.invoke_io_event(index, MemoryModificationEvent::Write(value));
         }
+
+        Ok(())
     }
 
-    pub fn get_memory_at(&mut self, index: u16) -> i16 {
-        if self.privilege == PrivilegeMode::User && self.is_address_protected(index) {
-            // self.interrupt(ACV_EXC);
-            // TODO exception (this function will need to return a result i suppose?)
+    pub fn get_memory_at(&mut self, index: u16) -> Result<i16, Lc3Error> {
+        if self.protect_memory
+            && self.privilege == PrivilegeMode::User
+            && self.is_address_protected(index)
+        {
+            return Err(Lc3Error::IllegalMemoryAccess(index));
         }
 
         if index == PSR {
-            return self.encode_psr() as i16;
+            return Ok(self.encode_psr() as i16);
         }
 
         let val = self.memory[index];
@@ -431,7 +457,7 @@ impl<'a> Machine<'a> {
             self.invoke_io_event(index, MemoryModificationEvent::Read(val));
         }
 
-        val
+        Ok(val)
     }
 
     pub fn set_span_at(&mut self, index: u16, value: &[i16]) {
@@ -453,7 +479,12 @@ impl<'a> Machine<'a> {
     pub fn step(&mut self) {
         let instr = self.memory[self.ip];
         self.ip += 1; // ip points to the next instruction
-        self.evaluate(Instruction::decode(instr as u16));
+
+        if let Err(err) = self.evaluate(Instruction::decode(instr as u16)) {
+            match err {
+                Lc3Error::IllegalMemoryAccess(_) => self.interrupt(ACV_EXC, 7),
+            }
+        }
     }
 
     pub fn add_to_ip(&mut self, offset: i16) {
@@ -498,7 +529,7 @@ impl<'a> Machine<'a> {
     }
 
     // cleanup needed
-    pub fn evaluate(&mut self, instr: Instruction) {
+    pub fn evaluate(&mut self, instr: Instruction) -> Result<(), Lc3Error> {
         match instr {
             Add(dest, s1, s2) => {
                 let s1 = self.registers.get(s1);
@@ -552,7 +583,7 @@ impl<'a> Machine<'a> {
 
             Load(dest, offset) => {
                 let addr = self.ip.wrapping_add_signed(offset.into_inner());
-                let val = self.get_memory_at(addr);
+                let val = self.get_memory_at(addr)?;
 
                 *self.registers.get_mut(dest) = val;
                 self.set_condition_code_based_on(dest);
@@ -560,9 +591,9 @@ impl<'a> Machine<'a> {
 
             LoadIndirect(dest, offset) => {
                 let addr = self.ip.wrapping_add_signed(offset.into_inner());
-                let addr = self.get_memory_at(addr) as u16;
+                let addr = self.get_memory_at(addr)? as u16;
 
-                let val = self.get_memory_at(addr);
+                let val = self.get_memory_at(addr)?;
                 *self.registers.get_mut(dest) = val;
                 self.set_condition_code_based_on(dest);
             }
@@ -570,7 +601,7 @@ impl<'a> Machine<'a> {
             LoadRegister(dest, baser, offset) => {
                 let addr = (self.registers.get(baser) as u16)
                     .wrapping_add_signed(offset.into_inner() as i16);
-                let val = self.get_memory_at(addr);
+                let val = self.get_memory_at(addr)?;
 
                 *self.registers.get_mut(dest) = val;
                 self.set_condition_code_based_on(dest);
@@ -604,27 +635,29 @@ impl<'a> Machine<'a> {
 
             Store(source, offset) => {
                 let addr = self.ip.wrapping_add_signed(offset.into_inner());
-                self.set_memory_at(addr, self.registers.get(source));
+                self.set_memory_at(addr, self.registers.get(source))?;
             }
 
             StoreIndirect(source, offset) => {
                 let addr = self.ip.wrapping_add_signed(offset.into_inner());
-                let addr = self.get_memory_at(addr) as u16;
+                let addr = self.get_memory_at(addr)? as u16;
 
-                self.set_memory_at(addr, self.registers.get(source));
+                self.set_memory_at(addr, self.registers.get(source))?;
             }
 
             StoreRegister(source, baser, offset) => {
                 let addr = self.registers.get(baser) as u16;
                 let addr = addr.wrapping_add_signed(offset.into_inner() as i16);
 
-                self.set_memory_at(addr, self.registers.get(source));
+                self.set_memory_at(addr, self.registers.get(source))?;
             }
 
             Trap(vector) => self.handle_trap(vector),
 
             Reserved => self.interrupt(ILLEGAL_OPCODE_EXC, 7),
-        }
+        };
+
+        Ok(())
     }
 
     fn handle_trap(&mut self, vec: u8) {
@@ -664,7 +697,7 @@ impl<'a> Machine<'a> {
 
         *self.registers.get_mut(Register::R6) = desired_val as i16;
 
-        self.set_memory_at(desired_val, val);
+        self.set_memory_at_unchecked(desired_val, val);
     }
 
     pub fn stack_pop(&mut self) -> i16 {
@@ -672,7 +705,7 @@ impl<'a> Machine<'a> {
         let new_val = original_val.wrapping_add(1); // stack grows down, so to pop we add one.
 
         *self.registers.get_mut(Register::R6) = new_val as i16;
-        self.get_memory_at(original_val)
+        self.get_memory_at_unchecked(original_val)
     }
 
     fn set_condition_code_based_on(&mut self, reg: Register) {

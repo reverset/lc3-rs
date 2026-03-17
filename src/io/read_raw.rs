@@ -16,7 +16,7 @@ pub fn read(mut data: &[u8]) -> AssemblyInfo {
 
         // concatenate the two bytes.
         let value = ((buf[0] as u16) << 8) | ((buf[1] as u16) & 0b11111111);
-        
+
         if orig.is_none() {
             // first two bytes are the "origin" bytes (where the code starts)
             orig = Some(value);
