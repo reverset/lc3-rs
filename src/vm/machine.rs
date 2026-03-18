@@ -16,6 +16,8 @@ const DSR: u16 = 0xFE04;
 const DDR: u16 = 0xFE06;
 const PSR: u16 = 0xFFFC;
 
+const MCR: u16 = 0xFFFE;
+
 const PRIVILEGE_EXC: u8 = 0x0;
 const ILLEGAL_OPCODE_EXC: u8 = 0x1;
 const ACV_EXC: u8 = 0x2; // illegal access to protected memory
@@ -59,6 +61,7 @@ impl ConditionCode {
 pub struct Memory(HashMap<u16, i16>);
 
 impl Memory {
+    #[allow(unused)]
     fn entries(&self) -> Keys<'_, u16, i16> {
         self.0.keys()
     }
@@ -96,7 +99,9 @@ pub struct Machine<'a> {
     pub priority: u8,
 
     pub halted: bool,
-    pub protect_memory: bool,
+
+    pub protect_system_memory: bool,
+    pub protect_device_memory: bool,
 
     memory_event_callbacks: HashMap<u16, fn(&mut Self, MemoryModificationEvent)>, // maybe a different data structure or hashing algorithm
 }
@@ -107,10 +112,10 @@ pub struct Machine<'a> {
 #[allow(unused)]
 impl<'a> Machine<'a> {
     pub fn new_x3000(instructions: &[Instruction]) -> Self {
-        Self::new(0x3000, true, instructions)
+        Self::new(0x3000, true, true, instructions)
     }
 
-    pub fn new(pc: u16, protect_memory: bool, instructions: &[Instruction]) -> Self {
+    pub fn new(pc: u16, protect_system_memory: bool, protect_device_memory: bool, instructions: &[Instruction]) -> Self {
         // let mut memory = Vec::from_iter((0..orig).map(|_| 0));
         // for inst in instructions {
         //     memory.push(inst.encode() as i16);
@@ -129,7 +134,8 @@ impl<'a> Machine<'a> {
             privilege: PrivilegeMode::User,
             priority: 0,
             halted: false,
-            protect_memory,
+            protect_system_memory,
+            protect_device_memory,
 
             memory_event_callbacks: HashMap::new(),
         };
@@ -294,6 +300,20 @@ impl<'a> Machine<'a> {
                 ReturnFromInterrupt.encode() as i16,
             ],
         );
+
+        
+        // Machine Control Register
+        // set 15th bit to 1.
+        self.set_memory_at_unchecked(MCR, 1 << 15);
+
+        self.add_io_callback(MCR, |machine, event| {
+            if let MemoryModificationEvent::Write(value) = event {
+                if value >= 0 { // 15th bit is cleared
+                    // time to halt
+                    machine.halted = true;
+                }
+            }
+        });
     }
 
     pub fn interrupt(&mut self, vector: u8, urgency: u8) {
@@ -394,7 +414,7 @@ impl<'a> Machine<'a> {
     }
 
     pub fn is_address_protected(&self, address: u16) -> bool {
-        self.is_address_in_io_section(address) || self.is_address_in_system_section(address)
+        (self.protect_device_memory && self.is_address_in_io_section(address)) || (self.protect_system_memory && self.is_address_in_system_section(address))
     }
 
     // Set data in the IO section of memory (0xFE00 to 0xFFFF)
@@ -425,8 +445,7 @@ impl<'a> Machine<'a> {
     }
 
     pub fn set_memory_at(&mut self, index: u16, value: i16) -> Result<(), Lc3Error> {
-        if self.protect_memory
-            && self.privilege == PrivilegeMode::User
+        if self.privilege == PrivilegeMode::User
             && self.is_address_protected(index)
         {
             return Err(Lc3Error::IllegalMemoryAccess(index));
@@ -447,8 +466,7 @@ impl<'a> Machine<'a> {
     }
 
     pub fn get_memory_at(&mut self, index: u16) -> Result<i16, Lc3Error> {
-        if self.protect_memory
-            && self.privilege == PrivilegeMode::User
+        if self.privilege == PrivilegeMode::User
             && self.is_address_protected(index)
         {
             return Err(Lc3Error::IllegalMemoryAccess(index));

@@ -159,6 +159,7 @@ fn check_ld() {
     let mut machine = Machine::new(
         0x3000,
         false,
+        false,
         &[
             Instruction::Load(Register::R0, (-2).into()), // r0 = 50 (see code after this)
             Instruction::trap_halt(),
@@ -194,6 +195,7 @@ fn check_ldi() {
     let mut machine = Machine::new(
         0x3000,
         false,
+        false,
         &[
             Instruction::LoadIndirect(Register::R0, (-2).into()), // r0 = 20 (load value stored at the address stored in ip offset -2)
             Instruction::trap_halt(),
@@ -211,6 +213,7 @@ fn check_ldi() {
 fn check_ldr() {
     let mut machine = Machine::new(
         0x3000,
+        false,
         false,
         &[
             Instruction::Load(Register::R0, (-2).into()),
@@ -254,6 +257,7 @@ fn check_jsrr() {
     let mut machine = Machine::new(
         0x3000,
         false,
+        false,
         &[
             Instruction::Load(Register::R1, (-2).into()),
             Instruction::JumpSubroutineRegister(Register::R1),
@@ -281,6 +285,7 @@ fn check_st() {
     let mut machine = Machine::new(
         0x3000,
         false,
+        false,
         &[
             Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
             Instruction::Store(Register::R0, (-3).into()),
@@ -297,6 +302,7 @@ fn check_st() {
 fn check_sti() {
     let mut machine = Machine::new(
         0x3000,
+        false,
         false,
         &[
             Instruction::AddImmediate(Register::R0, Register::R1, 5.into()),
@@ -316,6 +322,7 @@ fn check_sti() {
 fn check_str() {
     let mut machine = Machine::new(
         0x3000,
+        false,
         false,
         &[
             Instruction::Load(Register::R0, (-2).into()),
@@ -436,6 +443,22 @@ fn test_illegal_memory_access() {
 
     let out = run_given_in_out(&mut machine, &[]);
     assert_eq!(out, "[exc] ACV\n");
+}
+
+#[test]
+fn test_machine_control_register() {
+    let mut machine = Machine::new(0x3000, false, false, &[
+        Instruction::AddImmediate(Register::R0, Register::R0, (0).into()),
+        Instruction::StoreIndirect(Register::R0, (-3).into()),
+    ]);
+
+    // machine control register address
+    machine.set_memory_at_unchecked(0x3000 - 1, 0xFFFEu16 as i16);
+
+    machine.step();
+    machine.step();
+
+    assert_eq!(machine.halted, true);
 }
 
 pub fn run_given_in_out(machine: &mut Machine, input: &[u8]) -> String {

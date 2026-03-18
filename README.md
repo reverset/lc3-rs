@@ -14,10 +14,12 @@ Output of the above program:
 ## Plans
 | Feature         | Info                                |
 |-----------------|-------------------------------------|
-| Virtual Machine | [Mostly implemented](#instructions) |
+| *Virtual Machine | ✅                                  |
 | Assembler       | soon™️                              |
 | Disassembler    | soon™️                              |
 | C Compiler      | soon™️                              |
+
+* The basic OS included does not implement `putsp` yet.
 
 ## References
 - Introduction To Computing Systems: From Bits & Gates To C/C++ & Beyond (3rd Edition)
@@ -65,5 +67,4 @@ Output of the above program:
 
 # Missing features
 - `putsp` TRAP vector
-- 0xFFFE Machine control register
-- And likely a few more things
+- And maybe a few other things.
