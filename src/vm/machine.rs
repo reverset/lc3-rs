@@ -301,6 +301,19 @@ impl<'a> Machine<'a> {
             ],
         );
 
+
+        // IN trap vector
+        self.set_memory_at_unchecked(0x23, 0x025f);
+        self.set_span_at(
+            0x025f,
+            &[
+                Instruction::trap_puts().encode() as i16,
+                Instruction::trap_get_c().encode() as i16,
+                Instruction::trap_out().encode() as i16,
+
+                ReturnFromInterrupt.encode() as i16,
+            ],
+        );
         
         // Machine Control Register
         // set 15th bit to 1.
@@ -689,7 +702,7 @@ impl<'a> Machine<'a> {
         // TODO, implement trap vectors in the Machine's instructions itself,
         // instead of implementing it within Rust
         match vec {
-            0x23 => todo!("in"),
+            // 0x23 => todo!("in"),
             0x24 => todo!("putsp"),
 
             // halt

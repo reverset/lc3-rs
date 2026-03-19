@@ -331,7 +331,9 @@ impl Instruction {
         Trap(0x23)
     }
 
-    // TODO TRAP 0x24 (putsp)
+    pub fn trap_putsp() -> Self {
+        Trap(0x24)
+    }
 
     pub fn trap_halt() -> Self {
         Trap(0x25)

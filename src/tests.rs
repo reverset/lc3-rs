@@ -461,6 +461,21 @@ fn test_machine_control_register() {
     assert_eq!(machine.halted, true);
 }
 
+#[test]
+fn test_in() {
+    let mut machine = Machine::new(0x3000, false, false, &[
+        Instruction::LoadEffectiveAddress(Register::R0, (2).into()),
+        Instruction::trap_in(),
+        Instruction::trap_halt(),
+    ]);
+
+    machine.string_set(0x3003 , "Prompt:");
+
+    let res = run_given_in_out(&mut machine, &['5' as u8]);
+
+    assert_eq!(res, "Prompt:5");
+}
+
 pub fn run_given_in_out(machine: &mut Machine, input: &[u8]) -> String {
     let mut buf = String::new();
 
