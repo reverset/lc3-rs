@@ -6,7 +6,7 @@ authors = ["reverset"]
 
 [features]
 cli = ["crossterm"]
-asm = []
+asm = ["crossterm"]
 
 [[bin]]
 name = "lc3-cli"
