@@ -1,5 +1,17 @@
+// TODO! Add line number information into the tokens for error reporting
 
-#[derive(Clone, Debug)]
+const INSTRUCTIONS: &[&str] = &[
+    "add", "and", "brn",
+    "brnz", "brnzp", "brz", "brzp", "brp", "brnz", "brnp",
+    "jmp", "jsr", "jsrr",
+    "ld", "ldi", "ldr", "lea",
+    "not", "ret", "rti",
+    "st", "sti", "str",
+    "trap",
+    "getc", "puts", "in", "out", "halt", // trap vector convienences
+];
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Token {
     Origin(u16),
     End,
@@ -9,6 +21,8 @@ pub enum Token {
     Label(String),
 
     Instruction(String),
+    Register(u8),
+    Number(i16),
 }
 
 #[derive(Clone, Copy, Debug, Hash)]
@@ -17,6 +31,8 @@ pub enum TokenizerError {
     InvalidDirective,
     InvalidNumber,
     ExpectedString,
+    InvalidRegister,
+    InvalidLabel,
 }
 
 pub struct Tokenizer<'a> {
@@ -28,7 +44,7 @@ pub struct Tokenizer<'a> {
 impl<'a> Tokenizer<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
-            source: source,
+            source,
             pointer: 0,
             tokens: vec![],
         }
@@ -43,13 +59,28 @@ impl<'a> Tokenizer<'a> {
             let word = self.consume_word()?.to_string();
             let token = 
                 self.check_directive(&word)
-                    .or_else(|_| self.check_instruction(&word))?;
+                    .or_else(|_| self.check_instruction(&word))
+                    .or_else(|_| self.check_register(&word))
+                    .or_else(|_| self.check_number_literal(&word))
+                    .or_else(|_| self.check_label(&word))?;
             
             // println!("TOKEN: {token:?}");
             self.tokens.push(token);
         }
 
         Ok(self.tokens)
+    }
+
+    fn check_label(&mut self, word: &str) -> Result<Token, TokenizerError> {
+        if let Some(first) = word.chars().next() {
+            if first.is_digit(10) {
+                Err(TokenizerError::InvalidLabel)
+            } else {
+                Ok(Token::Label(word.to_string()))
+            }
+        } else {
+            Err(TokenizerError::UnexpectedEOF)
+        }
     }
 
     fn try_skip_comment(&mut self) {
@@ -78,24 +109,31 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    // TODO add full list of instructions
-    fn check_instruction(&mut self, current_word: &str) -> Result<Token, TokenizerError> {
-        println!("word: {current_word}");
-        match current_word.to_lowercase().as_str() { // lol
-            // surely there's a better way to do this
-            x @ "add" | 
-            x @ "and" | 
-            x @ "br" | 
-            x @ "brn" | 
-            x @ "brnz" | 
-            x @ "brnzp" | 
-            x @ "brz" | 
-            x @ "brzp" | 
-            x @ "brnp" | 
-            x @ "brp"
-             => Ok(Token::Instruction(x.to_string())),
+    fn check_number_literal(&mut self, word: &str) -> Result<Token, TokenizerError> {
+        Self::read_next_i16_num(word)
+            .map(|num| Token::Number(num))
+    }
 
-            _ => Err(TokenizerError::InvalidDirective),
+    fn check_register(&mut self, word: &str) -> Result<Token, TokenizerError> {
+        if word.to_lowercase().starts_with("r") {
+            let num_str = word.chars().nth(1).ok_or(TokenizerError::InvalidRegister)?;
+
+            let num = (num_str as u8).wrapping_sub(48);
+            if num <= 7 {
+                Ok(Token::Register(num))
+            } else {
+                Err(TokenizerError::InvalidRegister)
+            }
+        } else {
+            Err(TokenizerError::InvalidRegister)
+        }
+    }
+
+    fn check_instruction(&mut self, current_word: &str) -> Result<Token, TokenizerError> {
+        if INSTRUCTIONS.contains(&current_word) {
+            Ok(Token::Instruction(current_word.to_string()))
+        } else {
+            Err(TokenizerError::InvalidDirective)
         }
     }
 
@@ -121,6 +159,11 @@ impl<'a> Tokenizer<'a> {
                 ".stringz" => {
                     let s = self.read_string()?;
                     Ok(Token::Stringz(s.to_string()))
+                }
+
+                ".blkw" => {
+                    let count = Self::read_next_16_bit_num(self.consume_word()?)?;
+                    Ok(Token::Blkw(count))
                 }
                 
     
@@ -170,6 +213,32 @@ impl<'a> Tokenizer<'a> {
         Ok(&self.source[start..(self.pointer - 1)]) // -1 since pointer will be after the space
     }
 
+    fn read_next_i16_num(word: &str) -> Result<i16, TokenizerError> {
+        let num_str = &word[1..];
+
+        if word.starts_with('x') { // number starts with an 'x', must be hexadecimal
+            match i16::from_str_radix(num_str, 16) {
+                Ok(num) => Ok(num),
+                Err(_) => Err(TokenizerError::InvalidNumber),
+            }
+        } else if word.starts_with('#') { // decimal number
+            match i16::from_str_radix(num_str, 10) {
+                Ok(num) => Ok(num),
+                Err(_) => Err(TokenizerError::InvalidNumber),
+            }
+
+        }
+        else {
+            // default is decimal number
+            match i16::from_str_radix(word, 10) {
+                Ok(num) => Ok(num),
+                Err(_) => Err(TokenizerError::InvalidNumber),
+            }
+        }
+    }
+
+    // duplicate code! FIXME
+
     fn read_next_16_bit_num(word: &str) -> Result<u16, TokenizerError> {
         let num_str = &word[1..];
 
@@ -195,22 +264,27 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn read_string(&mut self) -> Result<&'a str, TokenizerError> {
-        let start = self.pointer+1; // skip over "
-        let opened = false;
+        self.skip_leading_spaces();
+        let start = self.pointer;
+        let mut opened = false;
 
         loop {
             let c = self.next_char()?;
 
-            if !opened && c != '"' {
-                return Err(TokenizerError::ExpectedString);
-            } else if c == '"' { // closing
-                break;
+            if !opened {
+                if c != '"' {
+                    return Err(TokenizerError::ExpectedString);
+                } else {
+                    opened = true;
+                }
+            } else {
+                if c == '"' {
+                    break;
+                }
             }
-
-            self.pointer += 1;
         }
 
-        Ok(&self.source[start..(self.pointer - 2)])
+        Ok(&self.source[(start+1)..(self.pointer - 1)])
     }
 }
 
