@@ -115,7 +115,12 @@ impl<'a> Machine<'a> {
         Self::new(0x3000, true, true, instructions)
     }
 
-    pub fn new(pc: u16, protect_system_memory: bool, protect_device_memory: bool, instructions: &[Instruction]) -> Self {
+    pub fn new(
+        pc: u16,
+        protect_system_memory: bool,
+        protect_device_memory: bool,
+        instructions: &[Instruction],
+    ) -> Self {
         // let mut memory = Vec::from_iter((0..orig).map(|_| 0));
         // for inst in instructions {
         //     memory.push(inst.encode() as i16);
@@ -301,7 +306,6 @@ impl<'a> Machine<'a> {
             ],
         );
 
-
         // IN trap vector
         self.set_memory_at_unchecked(0x23, 0x025f);
         self.set_span_at(
@@ -310,18 +314,18 @@ impl<'a> Machine<'a> {
                 Instruction::trap_puts().encode() as i16,
                 Instruction::trap_get_c().encode() as i16,
                 Instruction::trap_out().encode() as i16,
-
                 ReturnFromInterrupt.encode() as i16,
             ],
         );
-        
+
         // Machine Control Register
         // set 15th bit to 1.
         self.set_memory_at_unchecked(MCR, 1 << 15);
 
         self.add_io_callback(MCR, |machine, event| {
             if let MemoryModificationEvent::Write(value) = event {
-                if value >= 0 { // 15th bit is cleared
+                if value >= 0 {
+                    // 15th bit is cleared
                     // time to halt
                     machine.halted = true;
                 }
@@ -427,7 +431,8 @@ impl<'a> Machine<'a> {
     }
 
     pub fn is_address_protected(&self, address: u16) -> bool {
-        (self.protect_device_memory && self.is_address_in_io_section(address)) || (self.protect_system_memory && self.is_address_in_system_section(address))
+        (self.protect_device_memory && self.is_address_in_io_section(address))
+            || (self.protect_system_memory && self.is_address_in_system_section(address))
     }
 
     // Set data in the IO section of memory (0xFE00 to 0xFFFF)
@@ -458,9 +463,7 @@ impl<'a> Machine<'a> {
     }
 
     pub fn set_memory_at(&mut self, index: u16, value: i16) -> Result<(), Lc3Error> {
-        if self.privilege == PrivilegeMode::User
-            && self.is_address_protected(index)
-        {
+        if self.privilege == PrivilegeMode::User && self.is_address_protected(index) {
             return Err(Lc3Error::IllegalMemoryAccess(index));
         }
 
@@ -479,9 +482,7 @@ impl<'a> Machine<'a> {
     }
 
     pub fn get_memory_at(&mut self, index: u16) -> Result<i16, Lc3Error> {
-        if self.privilege == PrivilegeMode::User
-            && self.is_address_protected(index)
-        {
+        if self.privilege == PrivilegeMode::User && self.is_address_protected(index) {
             return Err(Lc3Error::IllegalMemoryAccess(index));
         }
 

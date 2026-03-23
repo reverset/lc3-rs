@@ -1,14 +1,9 @@
 // TODO! Add line number information into the tokens for error reporting
 
 const INSTRUCTIONS: &[&str] = &[
-    "add", "and", "brn",
-    "brnz", "brnzp", "brz", "brzp", "brp", "brnz", "brnp",
-    "jmp", "jsr", "jsrr",
-    "ld", "ldi", "ldr", "lea",
-    "not", "ret", "rti",
-    "st", "sti", "str",
-    "trap",
-    "getc", "puts", "in", "out", "halt", // trap vector convienences
+    "add", "and", "brn", "brnz", "brnzp", "brz", "brzp", "brp", "brnz", "brnp", "jmp", "jsr",
+    "jsrr", "ld", "ldi", "ldr", "lea", "not", "ret", "rti", "st", "sti", "str", "trap", "getc",
+    "puts", "in", "out", "halt", // trap vector convienences
 ];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -57,13 +52,13 @@ impl<'a> Tokenizer<'a> {
             self.try_skip_comment();
 
             let word = self.consume_word()?.to_string();
-            let token = 
-                self.check_directive(&word)
-                    .or_else(|_| self.check_instruction(&word))
-                    .or_else(|_| self.check_register(&word))
-                    .or_else(|_| self.check_number_literal(&word))
-                    .or_else(|_| self.check_label(&word))?;
-            
+            let token = self
+                .check_directive(&word)
+                .or_else(|_| self.check_instruction(&word))
+                .or_else(|_| self.check_register(&word))
+                .or_else(|_| self.check_number_literal(&word))
+                .or_else(|_| self.check_label(&word))?;
+
             // println!("TOKEN: {token:?}");
             self.tokens.push(token);
         }
@@ -87,7 +82,9 @@ impl<'a> Tokenizer<'a> {
         self.skip_leading_spaces();
         if self.peek() == Some(';') {
             while let Ok(c) = self.next_char() {
-                if c == '\n' { break; }
+                if c == '\n' {
+                    break;
+                }
             }
         }
         self.skip_newlines();
@@ -110,8 +107,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn check_number_literal(&mut self, word: &str) -> Result<Token, TokenizerError> {
-        Self::read_next_i16_num(word)
-            .map(|num| Token::Number(num))
+        Self::read_next_i16_num(word).map(|num| Token::Number(num))
     }
 
     fn check_register(&mut self, word: &str) -> Result<Token, TokenizerError> {
@@ -152,10 +148,8 @@ impl<'a> Tokenizer<'a> {
                     Ok(Token::Fill(index))
                 }
 
-                ".end" => {
-                    Ok(Token::End)
-                }
-                
+                ".end" => Ok(Token::End),
+
                 ".stringz" => {
                     let s = self.read_string()?;
                     Ok(Token::Stringz(s.to_string()))
@@ -165,8 +159,7 @@ impl<'a> Tokenizer<'a> {
                     let count = Self::read_next_16_bit_num(self.consume_word()?)?;
                     Ok(Token::Blkw(count))
                 }
-                
-    
+
                 _ => Err(TokenizerError::InvalidDirective),
             }
         }
@@ -175,7 +168,7 @@ impl<'a> Tokenizer<'a> {
     fn at_eof(&self) -> bool {
         self.pointer >= self.source.len()
     }
-    
+
     fn peek(&self) -> Option<char> {
         self.source.chars().nth(self.pointer)
     }
@@ -188,7 +181,9 @@ impl<'a> Tokenizer<'a> {
 
     fn skip_newlines(&mut self) {
         while let Ok(c) = self.next_char() {
-            if c == '\n' { continue; }
+            if c == '\n' {
+                continue;
+            }
             break;
         }
         self.pointer -= 1; // we overstep in the loop
@@ -204,8 +199,10 @@ impl<'a> Tokenizer<'a> {
             let c = self.next_char();
             match c {
                 Ok(c) => {
-                    if WORD_DELIMETERS.contains(&c) { break; };
-                },
+                    if WORD_DELIMETERS.contains(&c) {
+                        break;
+                    };
+                }
                 Err(_) => break,
             }
         }
@@ -216,19 +213,19 @@ impl<'a> Tokenizer<'a> {
     fn read_next_i16_num(word: &str) -> Result<i16, TokenizerError> {
         let num_str = &word[1..];
 
-        if word.starts_with('x') { // number starts with an 'x', must be hexadecimal
+        if word.starts_with('x') {
+            // number starts with an 'x', must be hexadecimal
             match i16::from_str_radix(num_str, 16) {
                 Ok(num) => Ok(num),
                 Err(_) => Err(TokenizerError::InvalidNumber),
             }
-        } else if word.starts_with('#') { // decimal number
+        } else if word.starts_with('#') {
+            // decimal number
             match i16::from_str_radix(num_str, 10) {
                 Ok(num) => Ok(num),
                 Err(_) => Err(TokenizerError::InvalidNumber),
             }
-
-        }
-        else {
+        } else {
             // default is decimal number
             match i16::from_str_radix(word, 10) {
                 Ok(num) => Ok(num),
@@ -242,19 +239,19 @@ impl<'a> Tokenizer<'a> {
     fn read_next_16_bit_num(word: &str) -> Result<u16, TokenizerError> {
         let num_str = &word[1..];
 
-        if word.starts_with('x') { // number starts with an 'x', must be hexadecimal
+        if word.starts_with('x') {
+            // number starts with an 'x', must be hexadecimal
             match u16::from_str_radix(num_str, 16) {
                 Ok(num) => Ok(num),
                 Err(_) => Err(TokenizerError::InvalidNumber),
             }
-        } else if word.starts_with('#') { // decimal number
+        } else if word.starts_with('#') {
+            // decimal number
             match u16::from_str_radix(num_str, 10) {
                 Ok(num) => Ok(num),
                 Err(_) => Err(TokenizerError::InvalidNumber),
             }
-            
-        }
-        else {
+        } else {
             // default is decimal number
             match u16::from_str_radix(word, 10) {
                 Ok(num) => Ok(num),
@@ -284,7 +281,6 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        Ok(&self.source[(start+1)..(self.pointer - 1)])
+        Ok(&self.source[(start + 1)..(self.pointer - 1)])
     }
 }
-

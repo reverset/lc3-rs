@@ -1,13 +1,13 @@
 #![cfg(feature = "asm")]
 
-mod tokenizer;
 mod parser;
+mod tokenizer;
 
 use std::{fs::File, io::Read};
 
-use crossterm::style::Stylize;
 use crate::parser::Parser;
 use crate::tokenizer::Tokenizer;
+use crossterm::style::Stylize;
 
 fn read_entire_file(path: &str) -> Result<String, Box<dyn std::error::Error>> {
     let mut file = File::open(path)?;
@@ -26,20 +26,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let msg = "Tokenizing".green().bold();
     println!("{msg}");
-    
+
     let lexer = Tokenizer::new(&contents);
     match lexer.tokenize() {
         Ok(tokens) => {
             println!("tokens: {tokens:?}");
 
-            let mut parser = Parser::new(tokens);
+            let msg = "Parsing".green().bold();
+            println!("{msg}");
 
+            let parser = Parser::new(tokens);
+            match parser.parse() {
+                Ok(ast) => {
+                    println!("AST: {ast:#?}");
+                }
+
+                Err(err) => {
+                    println!("error: {err:?}");
+                }
+            }
         }
         Err(err) => {
             println!("Error: {err:?}");
         }
     }
-
 
     Ok(())
 }

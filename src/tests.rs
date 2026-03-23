@@ -447,10 +447,15 @@ fn test_illegal_memory_access() {
 
 #[test]
 fn test_machine_control_register() {
-    let mut machine = Machine::new(0x3000, false, false, &[
-        Instruction::AddImmediate(Register::R0, Register::R0, (0).into()),
-        Instruction::StoreIndirect(Register::R0, (-3).into()),
-    ]);
+    let mut machine = Machine::new(
+        0x3000,
+        false,
+        false,
+        &[
+            Instruction::AddImmediate(Register::R0, Register::R0, (0).into()),
+            Instruction::StoreIndirect(Register::R0, (-3).into()),
+        ],
+    );
 
     // machine control register address
     machine.set_memory_at_unchecked(0x3000 - 1, 0xFFFEu16 as i16);
@@ -463,13 +468,18 @@ fn test_machine_control_register() {
 
 #[test]
 fn test_in() {
-    let mut machine = Machine::new(0x3000, false, false, &[
-        Instruction::LoadEffectiveAddress(Register::R0, (2).into()),
-        Instruction::trap_in(),
-        Instruction::trap_halt(),
-    ]);
+    let mut machine = Machine::new(
+        0x3000,
+        false,
+        false,
+        &[
+            Instruction::LoadEffectiveAddress(Register::R0, (2).into()),
+            Instruction::trap_in(),
+            Instruction::trap_halt(),
+        ],
+    );
 
-    machine.string_set(0x3003 , "Prompt:");
+    machine.string_set(0x3003, "Prompt:");
 
     let res = run_given_in_out(&mut machine, &['5' as u8]);
 
