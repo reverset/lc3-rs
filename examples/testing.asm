@@ -3,7 +3,6 @@
 ; hiii
 
 .fill #30
-            and         ; cool
             add r0, r1, r7
             add r0, r0, xA
 

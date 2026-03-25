@@ -10,7 +10,7 @@ const INSTRUCTIONS: &[&str] = &[
 pub enum Token {
     Origin(u16),
     End,
-    Fill(u16),
+    Fill(i16),
     Blkw(u16),
     Stringz(String),
     Label(String),
@@ -144,7 +144,8 @@ impl<'a> Tokenizer<'a> {
                 }
 
                 ".fill" => {
-                    let index = Self::read_next_16_bit_num(self.consume_word()?)?;
+                    // let index = Self::read_next_16_bit_num(self.consume_word()?)?;
+                    let index = Self::read_next_i16_num(self.consume_word()?)?;
                     Ok(Token::Fill(index))
                 }
 

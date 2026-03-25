@@ -43,6 +43,11 @@ pub enum AstNode {
     Orig(u16, Vec<AstNode>),
     Instruction(PartialInstruction),
     Label(String),
+
+    Fill(i16),
+    Stringz(String),
+    Blkw(u16),
+
 }
 
 pub struct Parser {
@@ -101,6 +106,10 @@ impl Parser {
                         Token::End => break,
                         Token::Label(label) => AstNode::Label(label.clone()),
                         Token::Instruction(opcode) => self.parse_instruction(&opcode, &next)?,
+                        
+                        Token::Fill(val) => AstNode::Fill(*val),
+                        Token::Blkw(val) => AstNode::Blkw(*val),
+                        Token::Stringz(val) => AstNode::Stringz(val.clone()),
 
                         _ => return Err(ParserError::UnexpectedToken(next)),
                     };
@@ -113,6 +122,7 @@ impl Parser {
             _ => Err(ParserError::NoOrig),
         }
     }
+
 
     fn parse_instruction(&mut self, opcode: &str, token: &Token) -> Result<AstNode, ParserError> {
         if opcode.starts_with("br") {
