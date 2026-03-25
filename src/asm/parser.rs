@@ -1,3 +1,5 @@
+use std::f32::consts::E;
+
 use crate::tokenizer::Token;
 use lc3::vm::instructions::Register;
 
@@ -39,6 +41,11 @@ impl PartialInstruction {
 }
 
 #[derive(Debug)]
+pub struct Ast {
+    orig_sections: Vec<AstNode>,
+}
+
+#[derive(Debug)]
 pub enum AstNode {
     Orig(u16, Vec<AstNode>),
     Instruction(PartialInstruction),
@@ -53,7 +60,6 @@ pub enum AstNode {
 pub struct Parser {
     tokens: Vec<Token>,
     pointer: usize,
-    ast: Option<AstNode>,
 }
 
 impl Parser {
@@ -61,37 +67,37 @@ impl Parser {
         Self {
             tokens,
             pointer: 0,
-            ast: None,
         }
     }
 
-    pub fn parse(mut self) -> Result<AstNode, ParserError> {
-        let mut orig = self.parse_orig();
+
+    pub fn parse(mut self) -> Result<Ast, ParserError> {
+        let mut origs = Vec::new();
         loop {
-            if orig.is_err() && self.ast.is_none() {
-                return orig;
-            }
+            let orig = self.parse_orig();
+            
+            match orig {
+                Ok(node) => {
+                    origs.push(node);
+                }
 
-            if orig.is_err() {
-                break;
+                Err(err) => {
+                    if origs.is_empty() {
+                        return Err(err)
+                    } else {
+                        match err {
+                            ParserError::UnexpectedEOF => break,
+                            _ => return Err(err),
+                        }
+                    }
+                }
             }
-
-            if self.ast.is_none() {
-                self.ast = orig.ok();
-            } else {
-                todo!()
-            }
-
-            orig = self.parse_orig();
         }
 
-        match orig {
-            Ok(ast) => Ok(ast),
-            Err(err) => match err {
-                ParserError::UnexpectedEOF => Ok(self.ast.unwrap()),
-                _ => Err(err),
-            },
-        }
+        Ok(Ast {
+            orig_sections: origs,
+        })
+
     }
 
     fn parse_orig(&mut self) -> Result<AstNode, ParserError> {
