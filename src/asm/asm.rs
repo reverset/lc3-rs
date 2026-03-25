@@ -2,9 +2,12 @@
 
 mod parser;
 mod tokenizer;
+mod codegen;
 
 use std::{fs::File, io::Read};
 
+use crate::codegen::Codegen;
+use crate::codegen::lc3tools_codegen::Lc3ToolsCodegen;
 use crate::parser::Parser;
 use crate::tokenizer::Tokenizer;
 use crossterm::style::Stylize;
@@ -39,6 +42,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             match parser.parse() {
                 Ok(ast) => {
                     println!("AST: {ast:#?}");
+                    let msg = "Assembling".green().bold();
+                    println!("{msg}");
+
+                    let codegen = Lc3ToolsCodegen::new();
+                    let res = codegen.generate(ast);
+                    let res = String::from_utf8_lossy(&res.bytes);
+                    println!("{res}");
                 }
 
                 Err(err) => {

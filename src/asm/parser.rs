@@ -42,7 +42,7 @@ impl PartialInstruction {
 
 #[derive(Debug)]
 pub struct Ast {
-    orig_sections: Vec<AstNode>,
+    pub orig_sections: Vec<AstNode>,
 }
 
 #[derive(Debug)]
@@ -55,6 +55,27 @@ pub enum AstNode {
     Stringz(String),
     Blkw(u16),
 
+}
+
+impl AstNode {
+    pub fn calculate_byte_length(&self) -> usize {
+        // LC-3 operators in shorts, so 2 bytes at a time
+        match self {
+            AstNode::Orig(_, ast_nodes) => {
+                let mut acc = 0;
+                for node in ast_nodes {
+                    acc += node.calculate_byte_length();
+                }
+
+                acc
+            },
+            AstNode::Instruction(partial_instruction) => 2,
+            AstNode::Label(_) => 0,
+            AstNode::Fill(_) => 2,
+            AstNode::Stringz(str) => str.bytes().len() * 2,
+            AstNode::Blkw(size) => *size as usize * 2,
+        }
+    }
 }
 
 pub struct Parser {
