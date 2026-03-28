@@ -1,6 +1,10 @@
+use core::panic;
 use std::collections::HashMap;
 
-use crate::{codegen::{Codegen, CodegenOutput}, parser::{Ast, AstNode}};
+use crate::{
+    codegen::{Codegen, CodegenOutput},
+    parser::{Ast, AstNode},
+};
 
 pub struct Lc3ToolsCodegen {
     label_lookup: HashMap<String, u16>,
@@ -24,6 +28,19 @@ impl Lc3ToolsCodegen {
         self.write("LC-3 OBJ FILE\n\n");
     }
 
+    fn generate_symbol(&mut self) {
+        self.write("\n.SYMBOL\n");
+
+        // TODO (may not be implemented)
+    }
+
+    fn generate_debug(&mut self) {
+        self.write("\n.DEBUG\n");
+        self.write("# DEBUG SYMBOLS FOR LC3TOOLS\n");
+
+        // TODO
+    }
+
     fn generate_orig(&mut self, offset: u16, nodes: Vec<AstNode>) {
         self.write(&num_to_4_hexadecimal(offset));
         self.write("\n");
@@ -32,7 +49,26 @@ impl Lc3ToolsCodegen {
         self.write(&format!("{short_length}\n"));
 
         // TODO
+        for node in nodes {
+            match node {
+                AstNode::Orig(_, _) => panic!("cannot have nested origs."),
+                AstNode::Instruction(partial_instruction) => {
+                    let instr = partial_instruction.as_u16();
+                    if let Some(instr) = instr {
+                        self.write(&format!("{}\n", num_to_4_hexadecimal(instr)));
+                    } else {
+                        panic!("failed to convert instruction into numeric form");
+                    }
+                }
 
+                AstNode::Label(_) => todo!(),
+                AstNode::Fill(val) => {
+                    self.write(&format!("{}\n", num_to_4_hexadecimal(val as u16)))
+                }
+                AstNode::Stringz(_) => todo!(),
+                AstNode::Blkw(_) => todo!(),
+            }
+        }
     }
 }
 
@@ -44,15 +80,18 @@ impl Codegen for Lc3ToolsCodegen {
 
         for orig in ast.orig_sections {
             if let AstNode::Orig(offset, nodes) = orig {
-
                 self.generate_orig(offset, nodes);
-
             } else {
                 panic!("orig_sections did not contain an orig! {orig:?}")
             }
         }
-        
-        CodegenOutput { bytes: self.generated }
+
+        self.generate_symbol();
+        self.generate_debug();
+
+        CodegenOutput {
+            bytes: self.generated,
+        }
     }
 }
 

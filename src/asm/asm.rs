@@ -1,8 +1,8 @@
 #![cfg(feature = "asm")]
 
+mod codegen;
 mod parser;
 mod tokenizer;
-mod codegen;
 
 use std::{fs::File, io::Read};
 

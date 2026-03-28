@@ -1,7 +1,7 @@
-use std::f32::consts::E;
+use std::{f32::consts::E, ops::Add};
 
 use crate::tokenizer::Token;
-use lc3::vm::instructions::Register;
+use lc3::vm::instructions::{Instruction, Register};
 
 #[derive(Debug)]
 pub enum ParserError {
@@ -30,8 +30,37 @@ pub enum Operand {
 
 #[derive(Debug)]
 pub struct PartialInstruction {
-    opcode: String,
-    operands: Vec<Operand>,
+    pub opcode: String, // todo replace with enum, or maybe don't create a PartialInstruction at all and just make a Instruction from the parsing step? FIXME
+    pub operands: Vec<Operand>,
+}
+
+impl PartialInstruction {
+
+    // NEEDS CONTEXT! If we have a label, i need to find it's relative position. TODO
+    // maybe keep track in parsing step and the go back and fix the offsets?
+    pub fn as_u16(&self) -> Option<u16> {
+        match self.opcode.as_str() { // maybe merge this with the parsing step
+            "add" => {
+                let Operand::Register(dst) = self.operands[0] else {
+                    return None
+                };
+
+                let Operand::Register(s1) = self.operands[1] else {
+                    return None
+                };
+
+                if let Operand::Register(s2) = self.operands[2] {
+                    Some(Instruction::Add(dst, s1, s2).encode())
+                } else if let Operand::Number(num) = self.operands[2] {
+                    Some(Instruction::AddImmediate(dst, s1, num.into()).encode())
+                } else {
+                    None
+                }
+            }
+
+            _ => None,
+        }
+    }
 }
 
 impl PartialInstruction {

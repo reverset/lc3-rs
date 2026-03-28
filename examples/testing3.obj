@@ -1,0 +1,20 @@
+LC-3 OBJ FILE
+
+.TEXT
+3000
+1
+1425
+
+.SYMBOL
+
+.LINKER_INFO
+
+.DEBUG
+# DEBUG SYMBOLS FOR LC3TOOLS
+
+====================
+LINE | ADDR | SOURCE
+   0 | ???? | .orig x3000\n
+   1 | 3000 |             add r2, r0, #5\n
+   2 | ???? | .end
+====================
