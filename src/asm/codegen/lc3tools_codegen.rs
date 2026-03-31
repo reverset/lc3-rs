@@ -51,15 +51,18 @@ impl Lc3ToolsCodegen {
         self.write(&num_to_4_hexadecimal(offset));
         self.write("\n");
 
-        let short_length = find_code_length_in_shorts(&nodes);
+        let short_length = find_code_length_in_words(&nodes);
         self.write(&format!("{short_length}\n"));
 
+        let mut word_distance = 0;
+
         // TODO
-        for (rel_pos, node) in nodes.iter().enumerate() {
+        for node in nodes {
+            let dist = node.calculate_word_length();
             match node {
                 AstNode::Orig(_, _) => panic!("cannot have nested origs."),
                 AstNode::Instruction(partial_instruction) => {
-                    let instr = partial_instruction.as_u16(offset as usize + rel_pos, &self.label_lookup);
+                    let instr = partial_instruction.as_u16(offset as usize + word_distance, &self.label_lookup);
                     if let Some(instr) = instr {
                         self.write(&format!("{}\n", num_to_4_hexadecimal(instr)));
                     } else {
@@ -69,11 +72,17 @@ impl Lc3ToolsCodegen {
 
                 AstNode::Label(_) => (), // not handling labels here.
                 AstNode::Fill(val) => {
-                    self.write(&format!("{}\n", num_to_4_hexadecimal(*val as u16)))
+                    self.write(&format!("{}\n", num_to_4_hexadecimal(val as u16)))
                 }
                 AstNode::Stringz(_) => todo!(),
-                AstNode::Blkw(_) => todo!(),
+                AstNode::Blkw(size) => {
+                    for _ in 0..size {
+                        self.write("????\n");
+                    }
+                },
             }
+
+            word_distance += dist;
         }
     }
 }
@@ -108,11 +117,11 @@ fn num_to_4_hexadecimal(num: u16) -> String {
     format!("{num:04X}")
 }
 
-fn find_code_length_in_shorts(nodes: &[AstNode]) -> usize {
+fn find_code_length_in_words(nodes: &[AstNode]) -> usize {
     let mut length = 0;
 
     for node in nodes {
-        length += node.calculate_byte_length() / 2;
+        length += node.calculate_word_length();
     }
 
     length

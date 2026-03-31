@@ -37,22 +37,22 @@ impl Ast {
     pub fn scan_for_labels(&self) -> HashMap<String, usize> {
         let mut map = HashMap::new();
 
-        // labels aren't real instructions, so we need to keep track of how many we have passed
-        // in order to know the correct position of the label.
-        let mut labels_passed = 0;
-
         for orig in &self.orig_sections {
+            // keep track of how many bytes we have passed
+            let mut byte_distance = 0;
+
             match orig {
             AstNode::Orig(pos, ast_nodes) => {
-                for (rel, node) in ast_nodes.iter().enumerate() {
+                for node in ast_nodes {
                     match node {
                         AstNode::Label(name) => {
-                            map.insert(name.clone(), *pos as usize + rel - labels_passed);
-                            labels_passed += 1;
+                            map.insert(name.clone(), *pos as usize + byte_distance);
                         },
-
+                        
                         _ => (),
                     }
+                    
+                    byte_distance += node.calculate_word_length();
                 }
             },
                 
@@ -77,22 +77,22 @@ pub enum AstNode {
 }
 
 impl AstNode {
-    pub fn calculate_byte_length(&self) -> usize {
-        // LC-3 operators in shorts, so 2 bytes at a time
+    pub fn calculate_word_length(&self) -> usize {
+        // LC-3 words are 2 bytes
         match self {
             AstNode::Orig(_, ast_nodes) => {
                 let mut acc = 0;
                 for node in ast_nodes {
-                    acc += node.calculate_byte_length();
+                    acc += node.calculate_word_length();
                 }
 
                 acc
             },
-            AstNode::Instruction(partial_instruction) => 2,
+            AstNode::Instruction(_) => 1,
             AstNode::Label(_) => 0,
-            AstNode::Fill(_) => 2,
-            AstNode::Stringz(str) => str.bytes().len() * 2,
-            AstNode::Blkw(size) => *size as usize * 2,
+            AstNode::Fill(_) => 1,
+            AstNode::Stringz(str) => str.bytes().len() + 1, // + null terminator, each char gets it's own word
+            AstNode::Blkw(size) => *size as usize,
         }
     }
 }

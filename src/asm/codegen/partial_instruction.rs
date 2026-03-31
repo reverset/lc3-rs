@@ -20,7 +20,10 @@ impl PartialInstruction {
         match self.operands[operand] {
             Operand::Label(ref name) => {
                 let label_pos = *label_lookup.get(name).expect("Label does not exist");
-                let desired_pos = (label_pos as isize) - (abs_position) as isize;
+
+                // +1 because we are taking the offset based on PC, which always points
+                // to the next instruction.
+                let desired_pos = (label_pos as isize) - (abs_position + 1) as isize;
 
                 Some(desired_pos as i16)
             }
