@@ -7,7 +7,7 @@ use crate::{
 };
 
 pub struct Lc3ToolsCodegen {
-    label_lookup: HashMap<String, u16>,
+    label_lookup: HashMap<String, usize>,
     generated: Vec<u8>,
 }
 
@@ -34,6 +34,12 @@ impl Lc3ToolsCodegen {
         // TODO (may not be implemented)
     }
 
+    fn generate_linker_info(&mut self) {
+        self.write("\n.LINKER_INFO\n");
+
+        // TODO
+    }
+
     fn generate_debug(&mut self) {
         self.write("\n.DEBUG\n");
         self.write("# DEBUG SYMBOLS FOR LC3TOOLS\n");
@@ -49,11 +55,11 @@ impl Lc3ToolsCodegen {
         self.write(&format!("{short_length}\n"));
 
         // TODO
-        for node in nodes {
+        for (rel_pos, node) in nodes.iter().enumerate() {
             match node {
                 AstNode::Orig(_, _) => panic!("cannot have nested origs."),
                 AstNode::Instruction(partial_instruction) => {
-                    let instr = partial_instruction.as_u16();
+                    let instr = partial_instruction.as_u16(offset as usize + rel_pos, &self.label_lookup);
                     if let Some(instr) = instr {
                         self.write(&format!("{}\n", num_to_4_hexadecimal(instr)));
                     } else {
@@ -61,9 +67,9 @@ impl Lc3ToolsCodegen {
                     }
                 }
 
-                AstNode::Label(_) => todo!(),
+                AstNode::Label(_) => (), // not handling labels here.
                 AstNode::Fill(val) => {
-                    self.write(&format!("{}\n", num_to_4_hexadecimal(val as u16)))
+                    self.write(&format!("{}\n", num_to_4_hexadecimal(*val as u16)))
                 }
                 AstNode::Stringz(_) => todo!(),
                 AstNode::Blkw(_) => todo!(),
@@ -74,6 +80,8 @@ impl Lc3ToolsCodegen {
 
 impl Codegen for Lc3ToolsCodegen {
     fn generate(mut self, ast: Ast) -> CodegenOutput {
+        self.label_lookup = ast.scan_for_labels();
+
         self.generate_header();
 
         self.write(".TEXT\n");
@@ -87,6 +95,7 @@ impl Codegen for Lc3ToolsCodegen {
         }
 
         self.generate_symbol();
+        self.generate_linker_info();
         self.generate_debug();
 
         CodegenOutput {

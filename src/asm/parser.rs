@@ -1,7 +1,7 @@
-use std::{f32::consts::E, ops::Add};
+use std::{collections::HashMap, f32::consts::E, ops::Add};
 
 use crate::tokenizer::Token;
-use lc3::vm::instructions::{Instruction, Register};
+use lc3::vm::{instructions::{DesiredConditionFlags, Instruction, PcOffset9, Register}, machine::ConditionCode};
 
 #[derive(Debug)]
 pub enum ParserError {
@@ -38,7 +38,32 @@ impl PartialInstruction {
 
     // NEEDS CONTEXT! If we have a label, i need to find it's relative position. TODO
     // maybe keep track in parsing step and the go back and fix the offsets?
-    pub fn as_u16(&self) -> Option<u16> {
+    // TODO better errors (although the parsing process should have handled all the cases here)
+    pub fn as_u16(&self, abs_position: usize, label_lookup: &HashMap<String, usize>) -> Option<u16> {
+        if self.opcode.starts_with("br") {
+            let negative = self.opcode.contains('n');
+            let zero = self.opcode.contains('n');
+            let positive = self.opcode.contains('n');
+        
+            let flags = DesiredConditionFlags {
+                negative,
+                zero,
+                positive,
+            };
+
+            let Operand::Label(ref name) = self.operands[0] else {
+                return None;
+            };
+
+            
+            // todo better error handling
+            let label_pos = *label_lookup.get(name).expect("Label does not exist");
+            let desired_pos = (label_pos as isize) - (abs_position) as isize;
+
+            return Some(Instruction::Branch(flags, (desired_pos as i16).into()).encode());
+
+        }
+        
         match self.opcode.as_str() { // maybe merge this with the parsing step
             "add" => {
                 let Operand::Register(dst) = self.operands[0] else {
@@ -58,6 +83,26 @@ impl PartialInstruction {
                 }
             }
 
+            "and" => {
+                let Operand::Register(dst) = self.operands[0] else {
+                    return None
+                };
+
+                let Operand::Register(s1) = self.operands[1] else {
+                    return None
+                };
+
+                if let Operand::Register(s2) = self.operands[2] {
+                    Some(Instruction::And(dst, s1, s2).encode())
+                } else if let Operand::Number(num) = self.operands[2] {
+                    Some(Instruction::AndImmediate(dst, s1, num.into()).encode())
+                } else {
+                    None
+                }
+            }
+
+            
+
             _ => None,
         }
     }
@@ -72,6 +117,37 @@ impl PartialInstruction {
 #[derive(Debug)]
 pub struct Ast {
     pub orig_sections: Vec<AstNode>,
+}
+
+impl Ast {
+    pub fn scan_for_labels(&self) -> HashMap<String, usize> {
+        let mut map = HashMap::new();
+
+        // labels aren't real instructions, so we need to keep track of how many we have passed
+        // in order to know the correct position of the label.
+        let mut labels_passed = 0;
+
+        for orig in &self.orig_sections {
+            match orig {
+            AstNode::Orig(pos, ast_nodes) => {
+                for (rel, node) in ast_nodes.iter().enumerate() {
+                    match node {
+                        AstNode::Label(name) => {
+                            map.insert(name.clone(), *pos as usize + rel - labels_passed);
+                            labels_passed += 1;
+                        },
+
+                        _ => (),
+                    }
+                }
+            },
+                
+                _ => eprintln!("root ast contained non-origs"), // BUG
+            }
+        }
+
+        map
+    }
 }
 
 #[derive(Debug)]
@@ -152,6 +228,8 @@ impl Parser {
 
     fn parse_orig(&mut self) -> Result<AstNode, ParserError> {
         let mut result = Vec::new();
+        let mut label_references: HashMap<String, Vec<usize>> = HashMap::new();
+
         let start = self.next()?;
         match start {
             Token::Origin(index) => {
@@ -172,6 +250,7 @@ impl Parser {
 
                     result.push(ast);
                 }
+
                 Ok(AstNode::Orig(index, result))
             }
 
