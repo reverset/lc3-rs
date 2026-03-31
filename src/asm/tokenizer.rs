@@ -192,7 +192,8 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn check_number_literal(&mut self, word: &str) -> TokenizerResult<Token> {
-        if let Some(c) = word.chars().nth(0) && c.is_digit(10) {
+        if let Some(c) = word.chars().nth(0) 
+            && (c.is_digit(10) || c == '#' || c == 'x') {
             Self::read_next_i16_num(word).map(|num| Token::Number(num)).into()
         } else {
             TokenizerResult::Fallthrough
