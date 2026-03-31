@@ -9,7 +9,7 @@ use std::{fs::File, io::Read};
 use crate::codegen::Codegen;
 use crate::codegen::lc3tools_codegen::Lc3ToolsCodegen;
 use crate::parser::Parser;
-use crate::tokenizer::Tokenizer;
+use crate::tokenizer::{Tokenizer, TokenizerResult};
 use crossterm::style::Stylize;
 
 fn read_entire_file(path: &str) -> Result<String, Box<dyn std::error::Error>> {
@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let lexer = Tokenizer::new(&contents);
     match lexer.tokenize() {
-        Ok(tokens) => {
+        TokenizerResult::Ok(tokens) => {
             println!("tokens: {tokens:?}");
 
             let msg = "Parsing".green().bold();
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        Err(err) => {
+        err @ _ => {
             println!("Error: {err:?}");
         }
     }

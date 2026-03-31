@@ -15,8 +15,12 @@ pub struct PartialInstruction {
 }
 
 impl PartialInstruction {
-
-    fn get_label_or_offset(&self, operand: usize, abs_position: usize, label_lookup: &HashMap<String, usize>) -> Option<i16> {
+    fn get_label_or_offset(
+        &self,
+        operand: usize,
+        abs_position: usize,
+        label_lookup: &HashMap<String, usize>,
+    ) -> Option<i16> {
         match self.operands[operand] {
             Operand::Label(ref name) => {
                 let label_pos = *label_lookup.get(name).expect("Label does not exist");
@@ -32,16 +36,19 @@ impl PartialInstruction {
 
             _ => None, // TODO better errors
         }
-
     }
 
     // TODO better errors (although the parsing process should have handled all the cases here)
-    pub fn as_u16(&self, abs_position: usize, label_lookup: &HashMap<String, usize>) -> Option<u16> {
+    pub fn as_u16(
+        &self,
+        abs_position: usize,
+        label_lookup: &HashMap<String, usize>,
+    ) -> Option<u16> {
         if self.opcode.starts_with("br") {
             let negative = self.opcode.contains('n');
             let zero = self.opcode.contains('n');
             let positive = self.opcode.contains('n');
-        
+
             let flags = DesiredConditionFlags {
                 negative,
                 zero,
@@ -53,17 +60,17 @@ impl PartialInstruction {
             };
 
             return Some(Instruction::Branch(flags, (desired_pos).into()).encode());
-
         }
-        
-        match self.opcode.as_str() { // maybe merge this with the parsing step
+
+        match self.opcode.as_str() {
+            // maybe merge this with the parsing step
             "add" => {
                 let Operand::Register(dst) = self.operands[0] else {
-                    return None
+                    return None;
                 };
 
                 let Operand::Register(s1) = self.operands[1] else {
-                    return None
+                    return None;
                 };
 
                 if let Operand::Register(s2) = self.operands[2] {
@@ -77,11 +84,11 @@ impl PartialInstruction {
 
             "and" => {
                 let Operand::Register(dst) = self.operands[0] else {
-                    return None
+                    return None;
                 };
 
                 let Operand::Register(s1) = self.operands[1] else {
-                    return None
+                    return None;
                 };
 
                 if let Operand::Register(s2) = self.operands[2] {
@@ -95,14 +102,15 @@ impl PartialInstruction {
 
             "jmp" => {
                 let Operand::Register(dst) = self.operands[0] else {
-                    return None
+                    return None;
                 };
 
                 Some(Instruction::Jump(dst).encode())
             }
 
             "jsr" => {
-                let Some(desired_pos) = self.get_label_or_offset(0, abs_position, label_lookup) else {
+                let Some(desired_pos) = self.get_label_or_offset(0, abs_position, label_lookup)
+                else {
                     return None;
                 };
 
@@ -122,7 +130,8 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup) else {
+                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
+                else {
                     return None;
                 };
 
@@ -134,7 +143,8 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup) else {
+                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
+                else {
                     return None;
                 };
 
@@ -162,7 +172,8 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup) else {
+                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
+                else {
                     return None;
                 };
 
@@ -182,17 +193,15 @@ impl PartialInstruction {
             }
 
             // parser does not emit ret
+            "rti" => Some(Instruction::ReturnFromInterrupt.encode()),
 
-            "rti" => {
-                Some(Instruction::ReturnFromInterrupt.encode())
-            }
-            
             "st" => {
                 let Operand::Register(sr) = self.operands[0] else {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup) else {
+                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
+                else {
                     return None;
                 };
 
@@ -204,7 +213,8 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup) else {
+                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
+                else {
                     return None;
                 };
 

@@ -2,26 +2,27 @@ LC-3 OBJ FILE
 
 .TEXT
 3000
-2
-1425
-0FFE
+16
+E002
+F022
+F025
+0048
+0065
+006C
+006C
+006F
+002C
+0020
+0057
+006F
+0072
+006C
+0064
+0000
 
 .SYMBOL
-ADDR | EXT | LABEL
-3000 |   0 | START
 
 .LINKER_INFO
 
 .DEBUG
 # DEBUG SYMBOLS FOR LC3TOOLS
-
-LABEL | INDEX
-START |    12
-====================
-LINE | ADDR | SOURCE
-   0 | ???? | .orig x3000\n
-   1 | ???? | START\n
-   2 | 3000 |             add r2, r0, #5\n
-   3 | 3001 |             brnzp START\n
-   4 | ???? | .end
-====================

@@ -1,7 +1,7 @@
-use std::{collections::HashMap, f32::consts::E, ops::Add};
+use std::collections::HashMap;
 
 use crate::{codegen::partial_instruction::PartialInstruction, tokenizer::Token};
-use lc3::vm::{instructions::{DesiredConditionFlags, Instruction, PcOffset9, Register}, machine::ConditionCode};
+use lc3::vm::instructions::Register;
 
 #[derive(Debug)]
 pub enum ParserError {
@@ -42,20 +42,20 @@ impl Ast {
             let mut byte_distance = 0;
 
             match orig {
-            AstNode::Orig(pos, ast_nodes) => {
-                for node in ast_nodes {
-                    match node {
-                        AstNode::Label(name) => {
-                            map.insert(name.clone(), *pos as usize + byte_distance);
-                        },
-                        
-                        _ => (),
+                AstNode::Orig(pos, ast_nodes) => {
+                    for node in ast_nodes {
+                        match node {
+                            AstNode::Label(name) => {
+                                map.insert(name.clone(), *pos as usize + byte_distance);
+                            }
+
+                            _ => (),
+                        }
+
+                        byte_distance += node.calculate_word_length();
                     }
-                    
-                    byte_distance += node.calculate_word_length();
                 }
-            },
-                
+
                 _ => eprintln!("root ast contained non-origs"), // BUG
             }
         }
@@ -73,7 +73,6 @@ pub enum AstNode {
     Fill(i16),
     Stringz(String),
     Blkw(u16),
-
 }
 
 impl AstNode {
@@ -87,7 +86,7 @@ impl AstNode {
                 }
 
                 acc
-            },
+            }
             AstNode::Instruction(_) => 1,
             AstNode::Label(_) => 0,
             AstNode::Fill(_) => 1,
@@ -104,18 +103,14 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Parser {
-        Self {
-            tokens,
-            pointer: 0,
-        }
+        Self { tokens, pointer: 0 }
     }
-
 
     pub fn parse(mut self) -> Result<Ast, ParserError> {
         let mut origs = Vec::new();
         loop {
             let orig = self.parse_orig();
-            
+
             match orig {
                 Ok(node) => {
                     origs.push(node);
@@ -123,7 +118,7 @@ impl Parser {
 
                 Err(err) => {
                     if origs.is_empty() {
-                        return Err(err)
+                        return Err(err);
                     } else {
                         match err {
                             ParserError::UnexpectedEOF => break,
@@ -137,12 +132,10 @@ impl Parser {
         Ok(Ast {
             orig_sections: origs,
         })
-
     }
 
     fn parse_orig(&mut self) -> Result<AstNode, ParserError> {
         let mut result = Vec::new();
-        let mut label_references: HashMap<String, Vec<usize>> = HashMap::new();
 
         let start = self.next()?;
         match start {
@@ -154,7 +147,7 @@ impl Parser {
                         Token::End => break,
                         Token::Label(label) => AstNode::Label(label.clone()),
                         Token::Instruction(opcode) => self.parse_instruction(&opcode, &next)?,
-                        
+
                         Token::Fill(val) => AstNode::Fill(*val),
                         Token::Blkw(val) => AstNode::Blkw(*val),
                         Token::Stringz(val) => AstNode::Stringz(val.clone()),
@@ -171,7 +164,6 @@ impl Parser {
             _ => Err(ParserError::NoOrig),
         }
     }
-
 
     fn parse_instruction(&mut self, opcode: &str, token: &Token) -> Result<AstNode, ParserError> {
         if opcode.starts_with("br") {

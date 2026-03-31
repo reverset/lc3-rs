@@ -62,7 +62,8 @@ impl Lc3ToolsCodegen {
             match node {
                 AstNode::Orig(_, _) => panic!("cannot have nested origs."),
                 AstNode::Instruction(partial_instruction) => {
-                    let instr = partial_instruction.as_u16(offset as usize + word_distance, &self.label_lookup);
+                    let instr = partial_instruction
+                        .as_u16(offset as usize + word_distance, &self.label_lookup);
                     if let Some(instr) = instr {
                         self.write(&format!("{}\n", num_to_4_hexadecimal(instr)));
                     } else {
@@ -74,12 +75,19 @@ impl Lc3ToolsCodegen {
                 AstNode::Fill(val) => {
                     self.write(&format!("{}\n", num_to_4_hexadecimal(val as u16)))
                 }
-                AstNode::Stringz(_) => todo!(),
+                AstNode::Stringz(phrase) => {
+                    let bytes = phrase.bytes();
+
+                    for byte in bytes {
+                        self.write(&format!("{}\n", num_to_4_hexadecimal(byte as u16)));
+                    }
+                    self.write("0000\n"); // null terminator
+                }
                 AstNode::Blkw(size) => {
                     for _ in 0..size {
                         self.write("????\n");
                     }
-                },
+                }
             }
 
             word_distance += dist;
