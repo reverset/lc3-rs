@@ -1,6 +1,6 @@
 use std::{collections::HashMap, f32::consts::E, ops::Add};
 
-use crate::tokenizer::Token;
+use crate::{codegen::partial_instruction::PartialInstruction, tokenizer::Token};
 use lc3::vm::{instructions::{DesiredConditionFlags, Instruction, PcOffset9, Register}, machine::ConditionCode};
 
 #[derive(Debug)]
@@ -26,92 +26,6 @@ pub enum Operand {
     Register(Register),
     Number(i16),
     Label(String),
-}
-
-#[derive(Debug)]
-pub struct PartialInstruction {
-    pub opcode: String, // todo replace with enum, or maybe don't create a PartialInstruction at all and just make a Instruction from the parsing step? FIXME
-    pub operands: Vec<Operand>,
-}
-
-impl PartialInstruction {
-
-    // NEEDS CONTEXT! If we have a label, i need to find it's relative position. TODO
-    // maybe keep track in parsing step and the go back and fix the offsets?
-    // TODO better errors (although the parsing process should have handled all the cases here)
-    pub fn as_u16(&self, abs_position: usize, label_lookup: &HashMap<String, usize>) -> Option<u16> {
-        if self.opcode.starts_with("br") {
-            let negative = self.opcode.contains('n');
-            let zero = self.opcode.contains('n');
-            let positive = self.opcode.contains('n');
-        
-            let flags = DesiredConditionFlags {
-                negative,
-                zero,
-                positive,
-            };
-
-            let Operand::Label(ref name) = self.operands[0] else {
-                return None;
-            };
-
-            
-            // todo better error handling
-            let label_pos = *label_lookup.get(name).expect("Label does not exist");
-            let desired_pos = (label_pos as isize) - (abs_position) as isize;
-
-            return Some(Instruction::Branch(flags, (desired_pos as i16).into()).encode());
-
-        }
-        
-        match self.opcode.as_str() { // maybe merge this with the parsing step
-            "add" => {
-                let Operand::Register(dst) = self.operands[0] else {
-                    return None
-                };
-
-                let Operand::Register(s1) = self.operands[1] else {
-                    return None
-                };
-
-                if let Operand::Register(s2) = self.operands[2] {
-                    Some(Instruction::Add(dst, s1, s2).encode())
-                } else if let Operand::Number(num) = self.operands[2] {
-                    Some(Instruction::AddImmediate(dst, s1, num.into()).encode())
-                } else {
-                    None
-                }
-            }
-
-            "and" => {
-                let Operand::Register(dst) = self.operands[0] else {
-                    return None
-                };
-
-                let Operand::Register(s1) = self.operands[1] else {
-                    return None
-                };
-
-                if let Operand::Register(s2) = self.operands[2] {
-                    Some(Instruction::And(dst, s1, s2).encode())
-                } else if let Operand::Number(num) = self.operands[2] {
-                    Some(Instruction::AndImmediate(dst, s1, num.into()).encode())
-                } else {
-                    None
-                }
-            }
-
-            
-
-            _ => None,
-        }
-    }
-}
-
-impl PartialInstruction {
-    pub fn new(opcode: String, operands: Vec<Operand>) -> PartialInstruction {
-        Self { opcode, operands }
-    }
 }
 
 #[derive(Debug)]
@@ -325,6 +239,36 @@ impl Parser {
             "trap" => Ok(AstNode::Instruction(PartialInstruction::new(
                 opcode.to_string(),
                 vec![self.expect_trapvect8()?],
+            ))),
+
+            "getc" => Ok(AstNode::Instruction(PartialInstruction::new(
+                "trap".into(),
+                vec![Operand::Number(0x20)],
+            ))),
+
+            "out" => Ok(AstNode::Instruction(PartialInstruction::new(
+                "trap".into(),
+                vec![Operand::Number(0x21)],
+            ))),
+
+            "puts" => Ok(AstNode::Instruction(PartialInstruction::new(
+                "trap".into(),
+                vec![Operand::Number(0x22)],
+            ))),
+
+            "in" => Ok(AstNode::Instruction(PartialInstruction::new(
+                "trap".into(),
+                vec![Operand::Number(0x23)],
+            ))),
+
+            "putsp" => Ok(AstNode::Instruction(PartialInstruction::new(
+                "trap".into(),
+                vec![Operand::Number(0x24)],
+            ))),
+
+            "halt" => Ok(AstNode::Instruction(PartialInstruction::new(
+                "trap".into(),
+                vec![Operand::Number(0x25)],
             ))),
 
             _ => Err(ParserError::UnexpectedToken(token.clone())),

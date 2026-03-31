@@ -1,6 +1,7 @@
 use crate::parser::Ast;
 
 pub mod lc3tools_codegen;
+pub mod partial_instruction;
 
 pub struct CodegenOutput {
     pub bytes: Vec<u8>,
