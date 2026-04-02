@@ -9,7 +9,7 @@ use std::{fs::File, io::Read};
 use crate::codegen::Codegen;
 use crate::codegen::lc3tools_codegen::Lc3ToolsCodegen;
 use crate::parser::Parser;
-use crate::tokenizer::{Tokenizer, TokenizerResult};
+use crate::tokenizer::{Tokenizer, TokenizerErrorInfo, TokenizerErrorKind, TokenizerResult};
 use crossterm::style::Stylize;
 
 fn read_entire_file(path: &str) -> Result<String, Box<dyn std::error::Error>> {
@@ -18,6 +18,17 @@ fn read_entire_file(path: &str) -> Result<String, Box<dyn std::error::Error>> {
     file.read_to_string(&mut buf)?;
 
     Ok(buf)
+}
+
+fn format_tokenizer_error(err: TokenizerErrorInfo, source: &str) -> String {
+    let source_cause: Vec<&str> = source.lines()
+        .skip(err.line.saturating_sub(4))
+        .take(8)
+        .collect();
+
+    let cause = source_cause.join("\n");
+
+    format!("Error: {err:?}\n\n{cause}")
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -56,9 +67,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        err @ _ => {
-            println!("Error: {err:?}");
+        TokenizerResult::Err(err) => {
+            println!("{}", format_tokenizer_error(err, &contents));
         }
+
+        _ => panic!("Unexpected tokenizer result"),
     }
 
     Ok(())

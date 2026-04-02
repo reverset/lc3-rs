@@ -49,6 +49,11 @@ pub fn read(data: &[u8]) -> AssemblyInfo {
                     if orig_length > 0 {
                         orig_length -= 1;
 
+                        if line == "????" { // temporary fix. TODO, add option to randomize memory, instead of initializing it to 0.
+                            data_sections.last_mut().unwrap().data.push(0);
+                            continue;
+                        }
+
                         let val = u16::from_str_radix(&line, 16).unwrap();
                         data_sections.last_mut().unwrap().data.push(val as i16);
                     } else {

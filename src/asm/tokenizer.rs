@@ -25,7 +25,7 @@ macro_rules! tryit {
 #[derive(Debug)]
 pub enum TokenizerResult<T> {
     Ok(T),
-    Err(TokenizerError),
+    Err(TokenizerErrorInfo),
     Fallthrough,
 }
 
@@ -79,13 +79,19 @@ impl<T> TokenizerResult<T> {
     }
 }
 
-impl<T> From<Result<T, TokenizerError>> for TokenizerResult<T> {
-    fn from(value: Result<T, TokenizerError>) -> Self {
+impl<T> From<Result<T, TokenizerErrorInfo>> for TokenizerResult<T> {
+    fn from(value: Result<T, TokenizerErrorInfo>) -> Self {
         match value {
             Ok(ok) => TokenizerResult::Ok(ok),
             Err(err) => TokenizerResult::Err(err),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Hash)]
+pub struct TokenizerErrorInfo {
+    pub line: usize,
+    pub kind: TokenizerErrorKind,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -103,7 +109,7 @@ pub enum Token {
 }
 
 #[derive(Clone, Copy, Debug, Hash)]
-pub enum TokenizerError {
+pub enum TokenizerErrorKind {
     UnexpectedEOF,
     InvalidDirective,
     InvalidNumber,
@@ -131,12 +137,14 @@ impl<'a> Tokenizer<'a> {
 
     pub fn tokenize(mut self) -> TokenizerResult<Vec<Token>> {
         while !self.at_eof() {
-            self.skip_newlines();
+            self.skip_whitespace();
 
             self.try_skip_comment();
 
             let word = tryit!(self.consume_word()
                 .map(|val| val.to_string()));
+
+            // println!("got word: {word}");
 
             let token = self
                 .check_directive(&word)
@@ -144,6 +152,7 @@ impl<'a> Tokenizer<'a> {
                 .if_fell(|| self.check_register(&word))
                 .if_fell(|| self.check_number_literal(&word))
                 .if_fell(|| self.check_label(&word));
+            // println!("got token: {token:?}");
 
             self.tokens.push(tryit!(token));
         }
@@ -151,15 +160,20 @@ impl<'a> Tokenizer<'a> {
         TokenizerResult::Ok(self.tokens)
     }
 
+    fn err<T>(&self, kind: TokenizerErrorKind) -> TokenizerResult<T> {
+        TokenizerResult::Err(self.create_error_info(kind))
+    }
+
     fn check_label(&mut self, word: &str) -> TokenizerResult<Token> {
         if let Some(first) = word.chars().next() {
             if first.is_digit(10) {
-                TokenizerResult::Err(TokenizerError::InvalidLabel)
+                self.err(TokenizerErrorKind::InvalidLabel)
             } else {
                 TokenizerResult::Ok(Token::Label(word.to_string()))
             }
         } else {
-            TokenizerResult::Err(TokenizerError::UnexpectedEOF)
+            // println!("FAILED");
+            self.err(TokenizerErrorKind::UnexpectedEOF)
         }
     }
 
@@ -172,7 +186,7 @@ impl<'a> Tokenizer<'a> {
                 }
             }
         }
-        self.skip_newlines();
+        self.skip_whitespace();
     }
 
     fn skip_leading_spaces(&mut self) {
@@ -194,14 +208,19 @@ impl<'a> Tokenizer<'a> {
     fn check_number_literal(&mut self, word: &str) -> TokenizerResult<Token> {
         if let Some(c) = word.chars().nth(0) 
             && (c.is_digit(10) || c == '#' || c == 'x') {
-            Self::read_next_i16_num(word).map(|num| Token::Number(num)).into()
+            self.read_next_i16_num(word).map(|num| Token::Number(num)).into()
         } else {
             TokenizerResult::Fallthrough
         }
     }
 
+    fn create_error_info(&self, kind: TokenizerErrorKind) -> TokenizerErrorInfo {
+        let line = self.source[..self.pointer].chars().filter(|c| *c == '\n').count() + 1;
+        TokenizerErrorInfo { line, kind }
+    }
+
     fn check_register(&mut self, word: &str) -> TokenizerResult<Token> {
-        if word.to_lowercase().starts_with("r") {
+        if word.to_lowercase().starts_with("r") && word.len() == 2 {
             let num_str = word.chars().nth(1);
 
             match num_str {
@@ -210,11 +229,11 @@ impl<'a> Tokenizer<'a> {
                     if num <= 7 {
                         TokenizerResult::Ok(Token::Register(num))
                     } else {
-                        TokenizerResult::Err(TokenizerError::InvalidRegister)
+                        self.err(TokenizerErrorKind::InvalidRegister)
                     }
                 }
 
-                None => TokenizerResult::Err(TokenizerError::InvalidRegister),
+                None => self.err(TokenizerErrorKind::InvalidRegister),
             }
 
         } else {
@@ -236,12 +255,14 @@ impl<'a> Tokenizer<'a> {
         } else {
             match current_word.to_lowercase().as_str() {
                 ".orig" => {
-                    let index = tryit!(Self::read_next_u16_bit_num(tryit!(self.consume_word())));
+                    let word = tryit!(self.consume_word()).to_string();
+                    let index = tryit!(self.read_next_u16_bit_num(&word));
                     TokenizerResult::Ok(Token::Origin(index))
                 }
 
                 ".fill" => {
-                    let index = tryit!(Self::read_next_i16_num(tryit!(self.consume_word())));
+                    let word = tryit!(self.consume_word()).to_string();
+                    let index = tryit!(self.read_next_i16_num(&word));
                     TokenizerResult::Ok(Token::Fill(index))
                 }
 
@@ -253,16 +274,17 @@ impl<'a> Tokenizer<'a> {
                 }
 
                 ".blkw" => {
-                    let count = tryit!(Self::read_next_u16_bit_num(tryit!(self.consume_word())));
-                    
+                    let word = tryit!(self.consume_word()).to_string();
+                    let count = tryit!(self.read_next_u16_bit_num(&word));
+
                     if count == 0 {
-                        TokenizerResult::Err(TokenizerError::BlkwParameterTooSmall)
+                        self.err(TokenizerErrorKind::BlkwParameterTooSmall)
                     } else {
                         TokenizerResult::Ok(Token::Blkw(count))
                     }
                 }
 
-                _ => TokenizerResult::Err(TokenizerError::InvalidDirective),
+                _ => self.err(TokenizerErrorKind::InvalidDirective),
             }
         }
     }
@@ -275,15 +297,15 @@ impl<'a> Tokenizer<'a> {
         self.source.chars().nth(self.pointer)
     }
 
-    fn next_char(&mut self) -> Result<char, TokenizerError> {
+    fn next_char(&mut self) -> Result<char, TokenizerErrorKind> {
         let c = self.source.chars().nth(self.pointer);
         self.pointer += 1;
-        c.ok_or(TokenizerError::UnexpectedEOF)
+        c.ok_or(TokenizerErrorKind::UnexpectedEOF)
     }
 
-    fn skip_newlines(&mut self) {
+    fn skip_whitespace(&mut self) {
         while let Ok(c) = self.next_char() {
-            if c == '\n' {
+            if c == '\n' || c == ' ' || c == '\t' {
                 continue;
             }
             break;
@@ -312,52 +334,52 @@ impl<'a> Tokenizer<'a> {
         TokenizerResult::Ok(&self.source[start..(self.pointer - 1)]) // -1 since pointer will be after the space
     }
 
-    fn read_next_i16_num(word: &str) -> TokenizerResult<i16> {
+    fn read_next_i16_num(&self, word: &str) -> TokenizerResult<i16> {
         let num_str = &word[1..];
 
         if word.starts_with('x') {
             // number starts with an 'x', must be hexadecimal
             match i16::from_str_radix(num_str, 16) {
                 Ok(num) => TokenizerResult::Ok(num),
-                Err(_) => TokenizerResult::Err(TokenizerError::InvalidNumber),
+                Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }
         } else if word.starts_with('#') {
             // decimal number
             match i16::from_str_radix(num_str, 10) {
                 Ok(num) => TokenizerResult::Ok(num),
-                Err(_) => TokenizerResult::Err(TokenizerError::InvalidNumber),
+                Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }
         } else {
             // default is decimal number
             match i16::from_str_radix(word, 10) {
                 Ok(num) => TokenizerResult::Ok(num),
-                Err(_) => TokenizerResult::Err(TokenizerError::InvalidNumber),
+                Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }
         }
     }
 
     // duplicate code! FIXME
 
-    fn read_next_u16_bit_num(word: &str) -> TokenizerResult<u16> {
+    fn read_next_u16_bit_num(&self, word: &str) -> TokenizerResult<u16> {
         let num_str = &word[1..];
 
         if word.starts_with('x') {
             // number starts with an 'x', must be hexadecimal
             match u16::from_str_radix(num_str, 16) {
                 Ok(num) => TokenizerResult::Ok(num),
-                Err(_) => TokenizerResult::Err(TokenizerError::InvalidNumber),
+                Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }
         } else if word.starts_with('#') {
             // decimal number
             match u16::from_str_radix(num_str, 10) {
                 Ok(num) => TokenizerResult::Ok(num),
-                Err(_) => TokenizerResult::Err(TokenizerError::InvalidNumber),
+                Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }
         } else {
             // default is decimal number
             match u16::from_str_radix(word, 10) {
                 Ok(num) => TokenizerResult::Ok(num),
-                Err(_) => TokenizerResult::Err(TokenizerError::InvalidNumber),
+                Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }
         }
     }
@@ -372,7 +394,7 @@ impl<'a> Tokenizer<'a> {
                 Ok(c) => {
                     if !opened {
                         if c != '"' {
-                            return TokenizerResult::Err(TokenizerError::ExpectedString);
+                            return self.err(TokenizerErrorKind::ExpectedString);
                         } else {
                             opened = true;
                         }
@@ -382,7 +404,7 @@ impl<'a> Tokenizer<'a> {
                         }
                     }
                 },
-                Err(err) => return TokenizerResult::Err(err),
+                Err(err) => return self.err(err),
             }
         }
 
