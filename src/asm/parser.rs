@@ -142,6 +142,7 @@ impl Parser {
             Token::Origin(index) => {
                 loop {
                     let next = self.next()?;
+                    println!("got token: {next:?}");
 
                     let ast = match &next {
                         Token::End => break,

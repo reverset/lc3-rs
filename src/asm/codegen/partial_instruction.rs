@@ -48,20 +48,20 @@ impl PartialInstruction {
             let negative = self.opcode.contains('n');
             let zero = self.opcode.contains('n');
             let positive = self.opcode.contains('n');
-
+            
             let flags = DesiredConditionFlags {
                 negative,
                 zero,
                 positive,
             };
-
+            
             let Some(desired_pos) = self.get_label_or_offset(0, abs_position, label_lookup) else {
                 return None;
             };
-
+            
             return Some(Instruction::Branch(flags, (desired_pos).into()).encode());
         }
-
+        
         match self.opcode.as_str() {
             // maybe merge this with the parsing step
             "add" => {
@@ -156,11 +156,11 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Operand::Register(baser) = self.operands[0] else {
+                let Operand::Register(baser) = self.operands[1] else {
                     return None;
                 };
 
-                let Operand::Number(offset6) = self.operands[0] else {
+                let Operand::Number(offset6) = self.operands[2] else {
                     return None;
                 };
 
@@ -185,7 +185,7 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Operand::Register(s1) = self.operands[0] else {
+                let Operand::Register(s1) = self.operands[1] else {
                     return None;
                 };
 
@@ -193,6 +193,7 @@ impl PartialInstruction {
             }
 
             // parser does not emit ret
+
             "rti" => Some(Instruction::ReturnFromInterrupt.encode()),
 
             "st" => {
@@ -226,11 +227,11 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Operand::Register(baser) = self.operands[0] else {
+                let Operand::Register(baser) = self.operands[1] else {
                     return None;
                 };
 
-                let Operand::Number(offset6) = self.operands[0] else {
+                let Operand::Number(offset6) = self.operands[2] else {
                     return None;
                 };
 

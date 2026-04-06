@@ -4,4 +4,10 @@ START
             and r0, r1, r2
             not r2, r2          ; cool
             brnzp START
+
+            brnzp OTHER
+OTHER
+
+            brnzp START
+            brnzp OTHER
 .end

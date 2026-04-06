@@ -67,6 +67,7 @@ impl Lc3ToolsCodegen {
                     if let Some(instr) = instr {
                         self.write(&format!("{}\n", num_to_4_hexadecimal(instr)));
                     } else {
+                        println!("failed to convert instruction into numeric form: {partial_instruction:?}");
                         panic!("failed to convert instruction into numeric form");
                     }
                 }

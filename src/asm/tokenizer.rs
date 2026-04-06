@@ -145,7 +145,7 @@ impl<'a> Tokenizer<'a> {
             let word = tryit!(self.consume_word()
                 .map(|val| val.to_string()));
 
-            println!("got word: {word}");
+            // println!("got word: {word}");
 
             let token = self
                 .check_directive(&word)
@@ -183,6 +183,7 @@ impl<'a> Tokenizer<'a> {
         if self.peek() == Some(';') {
             while let Ok(c) = self.next_char() {
                 if c == '\n' {
+                    self.try_skip_comment(); // skip any comments after this one on the next line
                     break;
                 }
             }
@@ -221,7 +222,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn check_register(&mut self, word: &str) -> TokenizerResult<Token> {
-        // TODO FIXME!!
+        // TODO FIXME!! (improve parsing for this)
         if word.to_lowercase().starts_with("r") && (word.len() == 2 || word.ends_with(",") || word.ends_with(", ")) {
             let num_str = word.chars().nth(1);
 
