@@ -1,6 +1,7 @@
 // TODO! Add line number information into the tokens for error reporting
 
 use core::panic;
+use std::ops::Add;
 
 const INSTRUCTIONS: &[&str] = &[
     "add", "and", "brn", "brnz", "brnzp", "brz", "brzp", "brp", "brnz", "brnp", "jmp", "jsr",
@@ -144,7 +145,7 @@ impl<'a> Tokenizer<'a> {
             let word = tryit!(self.consume_word()
                 .map(|val| val.to_string()));
 
-            // println!("got word: {word}");
+            println!("got word: {word}");
 
             let token = self
                 .check_directive(&word)
@@ -220,7 +221,8 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn check_register(&mut self, word: &str) -> TokenizerResult<Token> {
-        if word.to_lowercase().starts_with("r") && word.len() == 2 {
+        // TODO FIXME!!
+        if word.to_lowercase().starts_with("r") && (word.len() == 2 || word.ends_with(",") || word.ends_with(", ")) {
             let num_str = word.chars().nth(1);
 
             match num_str {
@@ -384,10 +386,12 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn read_string(&mut self) -> TokenizerResult<&'a str> {
+    fn read_string(&mut self) -> TokenizerResult<String> {
         self.skip_leading_spaces();
-        let start = self.pointer;
+        // let start = self.pointer;
         let mut opened = false;
+
+        let mut result = String::new();
 
         loop {
             match self.next_char() {
@@ -402,12 +406,33 @@ impl<'a> Tokenizer<'a> {
                         if c == '"' {
                             break;
                         }
+
+                        if c == '\\' {
+                            // handle escape sequences
+                            match self.next_char() {
+                                Ok(esc) => {
+                                    let esc_char = match esc {
+                                        'n' => '\n',
+                                        't' => '\t',
+                                        '\\' => '\\',
+                                        '"' => '"',
+                                        _ => return self.err(TokenizerErrorKind::ExpectedString),
+                                    };
+                                    result.push(esc_char);
+                                }
+                                Err(_) => return self.err(TokenizerErrorKind::UnexpectedEOF),
+                            }
+                        } else {
+                            result.push(c);
+                        }
+
                     }
                 },
                 Err(err) => return self.err(err),
             }
         }
 
-        TokenizerResult::Ok(&self.source[(start + 1)..(self.pointer - 1)])
+        TokenizerResult::Ok(result)
+        // TokenizerResult::Ok(&self.source[(start + 1)..(self.pointer - 1)])
     }
 }
