@@ -21,7 +21,8 @@ fn read_entire_file(path: &str) -> Result<String, Box<dyn std::error::Error>> {
 }
 
 fn format_tokenizer_error(err: TokenizerErrorInfo, source: &str) -> String {
-    let source_cause: Vec<&str> = source.lines()
+    let source_cause: Vec<&str> = source
+        .lines()
         .skip(err.line.saturating_sub(4))
         .take(8)
         .collect();

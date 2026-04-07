@@ -6,8 +6,19 @@ START
             brnzp START
 
             brnzp OTHER
+            jsr OTHER
 OTHER
 
             brnzp START
             brnzp OTHER
+
+            ld r0, VALUE
+            ldr r0, r0, #0
+            lea r0, VALUE
+
+            jsr OTHER
+
+            st r0, VALUE
+
+VALUE       .fill #5
 .end

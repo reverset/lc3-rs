@@ -12,15 +12,13 @@ const INSTRUCTIONS: &[&str] = &[
 // for some reason the Try trait is still 'experimental', so in order to implement
 // similiar behavior for TokenizerResult, I use this macro.
 macro_rules! tryit {
-    ($what:expr) => {
-        {
-            let val = $what;
-            match val {
-                TokenizerResult::Ok(val) => val,
-                _ => return (val).coalesce_type(),
-            }
+    ($what:expr) => {{
+        let val = $what;
+        match val {
+            TokenizerResult::Ok(val) => val,
+            _ => return (val).coalesce_type(),
         }
-    };
+    }};
 }
 
 #[derive(Debug)]
@@ -31,7 +29,7 @@ pub enum TokenizerResult<T> {
 }
 
 impl<T> TokenizerResult<T> {
-    pub fn map<T2>(self, map: impl FnOnce(T)->T2) -> TokenizerResult<T2> {
+    pub fn map<T2>(self, map: impl FnOnce(T) -> T2) -> TokenizerResult<T2> {
         match self {
             TokenizerResult::Ok(val) => TokenizerResult::Ok(map(val)),
 
@@ -63,17 +61,15 @@ impl<T> TokenizerResult<T> {
         }
     }
 
-    pub fn if_fell(self, map: impl FnOnce()->Self) -> Self {
-        if self.has_fallen() {
-            map()
-        } else {
-            self
-        }
+    pub fn if_fell(self, map: impl FnOnce() -> Self) -> Self {
+        if self.has_fallen() { map() } else { self }
     }
 
     pub fn coalesce_type<T2>(self) -> TokenizerResult<T2> {
         match self {
-            TokenizerResult::Ok(_) => panic!("TokenizerResult was Ok(_) which is invalid for this method."),
+            TokenizerResult::Ok(_) => {
+                panic!("TokenizerResult was Ok(_) which is invalid for this method.")
+            }
             TokenizerResult::Err(err) => TokenizerResult::Err(err),
             TokenizerResult::Fallthrough => TokenizerResult::Fallthrough,
         }
@@ -142,8 +138,7 @@ impl<'a> Tokenizer<'a> {
 
             self.try_skip_comment();
 
-            let word = tryit!(self.consume_word()
-                .map(|val| val.to_string()));
+            let word = tryit!(self.consume_word().map(|val| val.to_string()));
 
             // println!("got word: {word}");
 
@@ -208,22 +203,31 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn check_number_literal(&mut self, word: &str) -> TokenizerResult<Token> {
-        if let Some(c) = word.chars().nth(0) 
-            && (c.is_digit(10) || c == '#' || c == 'x') {
-            self.read_next_i16_num(word).map(|num| Token::Number(num)).into()
+        if let Some(c) = word.chars().nth(0)
+            && (c.is_digit(10) || c == '#' || c == 'x')
+        {
+            self.read_next_i16_num(word)
+                .map(|num| Token::Number(num))
+                .into()
         } else {
             TokenizerResult::Fallthrough
         }
     }
 
     fn create_error_info(&self, kind: TokenizerErrorKind) -> TokenizerErrorInfo {
-        let line = self.source[..self.pointer].chars().filter(|c| *c == '\n').count() + 1;
+        let line = self.source[..self.pointer]
+            .chars()
+            .filter(|c| *c == '\n')
+            .count()
+            + 1;
         TokenizerErrorInfo { line, kind }
     }
 
     fn check_register(&mut self, word: &str) -> TokenizerResult<Token> {
         // TODO FIXME!! (improve parsing for this)
-        if word.to_lowercase().starts_with("r") && (word.len() == 2 || word.ends_with(",") || word.ends_with(", ")) {
+        if word.to_lowercase().starts_with("r")
+            && (word.len() == 2 || word.ends_with(",") || word.ends_with(", "))
+        {
             let num_str = word.chars().nth(1);
 
             match num_str {
@@ -238,7 +242,6 @@ impl<'a> Tokenizer<'a> {
 
                 None => self.err(TokenizerErrorKind::InvalidRegister),
             }
-
         } else {
             TokenizerResult::Fallthrough
         }
@@ -426,9 +429,8 @@ impl<'a> Tokenizer<'a> {
                         } else {
                             result.push(c);
                         }
-
                     }
-                },
+                }
                 Err(err) => return self.err(err),
             }
         }

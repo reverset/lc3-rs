@@ -48,20 +48,20 @@ impl PartialInstruction {
             let negative = self.opcode.contains('n');
             let zero = self.opcode.contains('n');
             let positive = self.opcode.contains('n');
-            
+
             let flags = DesiredConditionFlags {
                 negative,
                 zero,
                 positive,
             };
-            
+
             let Some(desired_pos) = self.get_label_or_offset(0, abs_position, label_lookup) else {
                 return None;
             };
-            
+
             return Some(Instruction::Branch(flags, (desired_pos).into()).encode());
         }
-        
+
         match self.opcode.as_str() {
             // maybe merge this with the parsing step
             "add" => {
@@ -193,7 +193,6 @@ impl PartialInstruction {
             }
 
             // parser does not emit ret
-
             "rti" => Some(Instruction::ReturnFromInterrupt.encode()),
 
             "st" => {
