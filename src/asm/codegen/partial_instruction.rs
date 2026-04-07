@@ -46,8 +46,8 @@ impl PartialInstruction {
     ) -> Option<u16> {
         if self.opcode.starts_with("br") {
             let negative = self.opcode.contains('n');
-            let zero = self.opcode.contains('n');
-            let positive = self.opcode.contains('n');
+            let zero = self.opcode.contains('z');
+            let positive = self.opcode.contains('p');
 
             let flags = DesiredConditionFlags {
                 negative,
