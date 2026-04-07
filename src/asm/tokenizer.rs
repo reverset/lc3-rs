@@ -138,7 +138,7 @@ impl<'a> Tokenizer<'a> {
 
             self.try_skip_comment();
 
-            let word = tryit!(self.consume_word().map(|val| val.to_string()));
+            let word = tryit!(self.consume_word().map(|val| val.to_lowercase()));
 
             // println!("got word: {word}");
 
@@ -178,6 +178,7 @@ impl<'a> Tokenizer<'a> {
         if self.peek() == Some(';') {
             while let Ok(c) = self.next_char() {
                 if c == '\n' {
+                    self.skip_whitespace();
                     self.try_skip_comment(); // skip any comments after this one on the next line
                     break;
                 }
