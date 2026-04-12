@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use lc3::vm::instructions::{DesiredConditionFlags, Instruction};
 
-use crate::parser::Operand;
+use crate::asm::parser::Operand;
 
 // TODO not a very DRY solution, consider refactoring where the parser emits the Instructions directly.
 // It will require some way to find all the label offsets before hand though and build a map of those.

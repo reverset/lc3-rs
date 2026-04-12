@@ -6,7 +6,7 @@ of exceptions, see [Missing Features](#missing-features).
 ## Example Usage
 Running a program
 ```bash
-cargo run -r --bin lc3-cli --features="cli" -- run examples/hello2.obj
+cargo run -r --bin lc3-cli --all-features -- run examples/hello2.obj
 ```
 
 ## Progress
@@ -70,3 +70,4 @@ cargo run -r --bin lc3-cli --features="cli" -- run examples/hello2.obj
 - Assembler
     - Revamp error messages (completely terrible at the moment)
     - Raw output format planned (currently outputs the same format as LC3Tools, without symbols or debug)
+    - Linking

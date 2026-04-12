@@ -1,7 +1,8 @@
-use crate::parser::Ast;
+use crate::asm::parser::Ast;
+
+mod lc3tools_tests;
 
 pub mod lc3tools_codegen;
-mod lc3tools_tests;
 pub mod partial_instruction;
 
 pub struct CodegenOutput {

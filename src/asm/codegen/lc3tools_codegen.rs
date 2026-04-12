@@ -2,8 +2,8 @@ use core::panic;
 use std::collections::HashMap;
 
 use crate::{
-    codegen::{Codegen, CodegenOutput},
-    parser::{Ast, AstNode},
+    asm::codegen::{Codegen, CodegenOutput},
+    asm::parser::{Ast, AstNode},
 };
 
 pub struct Lc3ToolsCodegen {

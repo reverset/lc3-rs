@@ -1,7 +1,6 @@
 // TODO! Add line number information into the tokens for error reporting
 
 use core::panic;
-use std::ops::Add;
 
 const INSTRUCTIONS: &[&str] = &[
     "add", "and", "brn", "brnz", "brnzp", "brz", "brzp", "brp", "brnz", "brnp", "jmp", "jsr",

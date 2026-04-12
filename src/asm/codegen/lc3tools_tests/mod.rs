@@ -1,9 +1,9 @@
 #[cfg(test)]
 pub mod tests {
     use crate::{
-        codegen::{Codegen, lc3tools_codegen::Lc3ToolsCodegen},
-        parser::Parser,
-        tokenizer::Tokenizer,
+        asm::codegen::{Codegen, lc3tools_codegen::Lc3ToolsCodegen},
+        asm::parser::Parser,
+        asm::tokenizer::Tokenizer,
     };
 
     #[test]

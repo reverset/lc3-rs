@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{codegen::partial_instruction::PartialInstruction, tokenizer::Token};
+use crate::{asm::codegen::partial_instruction::PartialInstruction, asm::tokenizer::Token};
 use lc3::vm::instructions::Register;
 
 #[derive(Debug)]
