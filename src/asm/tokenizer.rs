@@ -135,8 +135,12 @@ impl<'a> Tokenizer<'a> {
     pub fn tokenize(mut self) -> TokenizerResult<Vec<Token>> {
         while !self.at_eof() {
             self.skip_whitespace();
-
             self.try_skip_comment();
+
+            // skipping comments might bring us to EOF!
+            if self.at_eof() {
+                break;
+            }
 
             let word = tryit!(self.consume_word().map(|val| val.to_lowercase()));
 
