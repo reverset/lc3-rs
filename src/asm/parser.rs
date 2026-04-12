@@ -44,12 +44,8 @@ impl Ast {
             match orig {
                 AstNode::Orig(pos, ast_nodes) => {
                     for node in ast_nodes {
-                        match node {
-                            AstNode::Label(name) => {
-                                map.insert(name.clone(), *pos as usize + byte_distance);
-                            }
-
-                            _ => (),
+                        if let AstNode::Label(name) = node {
+                            map.insert(name.clone(), *pos as usize + byte_distance);
                         }
 
                         byte_distance += node.calculate_word_length();
@@ -90,7 +86,7 @@ impl AstNode {
             AstNode::Instruction(_) => 1,
             AstNode::Label(_) => 0,
             AstNode::Fill(_) => 1,
-            AstNode::Stringz(str) => str.bytes().len() + 1, // + null terminator, each char gets it's own word
+            AstNode::Stringz(str) => str.len() + 1, // + null terminator, each char gets it's own word
             AstNode::Blkw(size) => *size as usize,
         }
     }
@@ -147,7 +143,7 @@ impl Parser {
                     let ast = match &next {
                         Token::End => break,
                         Token::Label(label) => AstNode::Label(label.clone()),
-                        Token::Instruction(opcode) => self.parse_instruction(&opcode, &next)?,
+                        Token::Instruction(opcode) => self.parse_instruction(opcode, &next)?,
 
                         Token::Fill(val) => AstNode::Fill(*val),
                         Token::Blkw(val) => AstNode::Blkw(*val),
@@ -274,7 +270,7 @@ impl Parser {
         match n {
             // offset 6 is used for register offsets, so no labels in this case
             // Token::Label(label) => Ok(Operand::Label(label)),
-            Token::Number(num) if -128 <= num && num <= 127 => Ok(Operand::Number(num)),
+            Token::Number(num) if (-128..=127).contains(&num) => Ok(Operand::Number(num)),
             _ => Err(ParserError::ExpectedTrapVect8(n)),
         }
     }
@@ -285,7 +281,7 @@ impl Parser {
         match n {
             // offset 6 is used for register offsets, so no labels in this case
             // Token::Label(label) => Ok(Operand::Label(label)),
-            Token::Number(num) if -32 <= num && num <= 31 => Ok(Operand::Number(num)),
+            Token::Number(num) if (-32..=31).contains(&num) => Ok(Operand::Number(num)),
             _ => Err(ParserError::ExpectedOffset6(n)),
         }
     }
@@ -296,7 +292,7 @@ impl Parser {
         match n {
             Token::Label(label) => Ok(Operand::Label(label)),
             Token::Number(num) => {
-                if -1024 <= num && num <= 1023 {
+                if (-1024..=1023).contains(&num) {
                     Ok(Operand::Number(num))
                 } else {
                     Err(ParserError::ExpectedOffset11(n))
@@ -312,7 +308,7 @@ impl Parser {
         match n {
             Token::Label(label) => Ok(Operand::Label(label)),
             Token::Number(num) => {
-                if -256 <= num && num <= 255 {
+                if (-256..=255).contains(&num) {
                     Ok(Operand::Number(num))
                 } else {
                     Err(ParserError::ExpectedOffset9(n))
@@ -326,7 +322,7 @@ impl Parser {
         let n = self.next()?;
 
         match n {
-            Token::Number(n) if n >= -16 && n <= 15 => Ok(Operand::Number(n)),
+            Token::Number(n) if (-16..=15).contains(&n) => Ok(Operand::Number(n)),
 
             _ => Err(ParserError::ExpectedImmediate5(n)),
         }

@@ -323,13 +323,12 @@ impl<'a> Machine<'a> {
         self.set_memory_at_unchecked(MCR, 1 << 15);
 
         self.add_io_callback(MCR, |machine, event| {
-            if let MemoryModificationEvent::Write(value) = event {
-                if value >= 0 {
+            if let MemoryModificationEvent::Write(value) = event
+                && value >= 0 {
                     // 15th bit is cleared
                     // time to halt
                     machine.halted = true;
                 }
-            }
         });
     }
 

@@ -165,7 +165,7 @@ impl<'a> Tokenizer<'a> {
 
     fn check_label(&mut self, word: &str) -> TokenizerResult<Token> {
         if let Some(first) = word.chars().next() {
-            if first.is_digit(10) {
+            if first.is_ascii_digit() {
                 self.err(TokenizerErrorKind::InvalidLabel)
             } else {
                 TokenizerResult::Ok(Token::Label(word.to_string()))
@@ -208,11 +208,10 @@ impl<'a> Tokenizer<'a> {
 
     fn check_number_literal(&mut self, word: &str) -> TokenizerResult<Token> {
         if let Some(c) = word.chars().nth(0)
-            && (c.is_digit(10) || c == '#' || c == 'x')
+            && (c.is_ascii_digit() || c == '#' || c == 'x')
         {
             self.read_next_i16_num(word)
-                .map(|num| Token::Number(num))
-                .into()
+                .map(Token::Number)
         } else {
             TokenizerResult::Fallthrough
         }
