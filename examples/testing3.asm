@@ -3,5 +3,5 @@
             puts
             halt
 
-HELLO       .stringz "Hello, World"
+HELLO       .stringz "\t\"Hello, World\"\n"
 .end
