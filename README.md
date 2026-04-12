@@ -4,22 +4,20 @@ An LC-3 virtual machine, implemented in Rust. Most features are implemented with
 of exceptions, see [Missing Features](#missing-features).
 
 ## Example Usage
+Running a program
 ```bash
-cargo run -r --features="cli" -- run examples/hello2.obj
+cargo run -r --bin lc3-cli --features="cli" -- run examples/hello2.obj
 ```
 
-Output of the above program:
-![hello world five times](static/helloworld.png)
+## Progress
+| Feature          | Info                                |
+|------------------|-------------------------------------|
+| Virtual Machine  | ✅                                  |
+| Assembler        | 🚧                                  |
+| Disassembler     | soon™️                              |
+| C Compiler       | soon™️                              |
 
-## Plans
-| Feature         | Info                                |
-|-----------------|-------------------------------------|
-| *Virtual Machine | ✅                                  |
-| Assembler       | soon™️                              |
-| Disassembler    | soon™️                              |
-| C Compiler      | soon™️                              |
-
-* The basic OS included does not implement `putsp` yet.
+- Assembler is very basic at the moment, not ready yet.
 
 ## References
 - Introduction To Computing Systems: From Bits & Gates To C/C++ & Beyond (3rd Edition)
@@ -66,5 +64,9 @@ Output of the above program:
 * Memory protection relies on how the interrupt is handled. If the default OS is removed, strange behavior may occur if not handled correctly.
 
 # Missing features
-- `putsp` TRAP vector
-- And maybe a few other things.
+- Virtual Machine
+    - `putsp` TRAP vector
+    - And maybe a few other things.
+- Assembler
+    - Revamp error messages (completely terrible at the moment)
+    - Raw output format planned (currently outputs the same format as LC3Tools, without symbols or debug)

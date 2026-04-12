@@ -6,11 +6,17 @@ authors = ["reverset"]
 
 [features]
 cli = ["crossterm"]
+asm = ["crossterm"]
 
 [[bin]]
 name = "lc3-cli"
 path = "src/cli.rs"
 required-features = ["cli"]
+
+[[bin]]
+name = "lc3-asm"
+path = "src/asm/asm.rs"
+required-features = ["asm"]
 
 [lib]
 name = "lc3"
