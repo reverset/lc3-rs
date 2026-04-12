@@ -27,6 +27,7 @@ pub enum TokenizerResult<T> {
     Fallthrough,
 }
 
+#[allow(unused)]
 impl<T> TokenizerResult<T> {
     pub fn map<T2>(self, map: impl FnOnce(T) -> T2) -> TokenizerResult<T2> {
         match self {
@@ -37,11 +38,7 @@ impl<T> TokenizerResult<T> {
     }
 
     pub fn has_fallen(&self) -> bool {
-        match self {
-            Self::Fallthrough => true,
-
-            _ => false,
-        }
+        matches!(self, Self::Fallthrough)
     }
 
     pub fn unwrap(self) -> T {
@@ -53,11 +50,7 @@ impl<T> TokenizerResult<T> {
     }
 
     pub fn is_ok(&self) -> bool {
-        match self {
-            Self::Ok(_) => true,
-
-            _ => false,
-        }
+        matches!(self, Self::Ok(_))
     }
 
     pub fn if_fell(self, map: impl FnOnce() -> Self) -> Self {
@@ -193,15 +186,10 @@ impl<'a> Tokenizer<'a> {
     fn skip_leading_spaces(&mut self) {
         const SKIPPABLE: &[char] = &[' ', '\t'];
 
-        loop {
-            match self.next_char() {
-                Ok(c) => {
-                    if !SKIPPABLE.contains(&c) {
-                        self.pointer -= 1;
-                        break;
-                    }
-                }
-                Err(_) => break,
+        while let Ok(c) = self.next_char() {
+            if !SKIPPABLE.contains(&c) {
+                self.pointer -= 1;
+                break;
             }
         }
     }
@@ -210,8 +198,7 @@ impl<'a> Tokenizer<'a> {
         if let Some(c) = word.chars().nth(0)
             && (c.is_ascii_digit() || c == '#' || c == 'x')
         {
-            self.read_next_i16_num(word)
-                .map(Token::Number)
+            self.read_next_i16_num(word).map(Token::Number)
         } else {
             TokenizerResult::Fallthrough
         }
@@ -354,13 +341,13 @@ impl<'a> Tokenizer<'a> {
             }
         } else if word.starts_with('#') {
             // decimal number
-            match i16::from_str_radix(num_str, 10) {
+            match num_str.parse::<i16>() {
                 Ok(num) => TokenizerResult::Ok(num),
                 Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }
         } else {
             // default is decimal number
-            match i16::from_str_radix(word, 10) {
+            match word.parse::<i16>() {
                 Ok(num) => TokenizerResult::Ok(num),
                 Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }
@@ -380,13 +367,13 @@ impl<'a> Tokenizer<'a> {
             }
         } else if word.starts_with('#') {
             // decimal number
-            match u16::from_str_radix(num_str, 10) {
+            match num_str.parse::<u16>() {
                 Ok(num) => TokenizerResult::Ok(num),
                 Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }
         } else {
             // default is decimal number
-            match u16::from_str_radix(word, 10) {
+            match word.parse::<u16>() {
                 Ok(num) => TokenizerResult::Ok(num),
                 Err(_) => self.err(TokenizerErrorKind::InvalidNumber),
             }

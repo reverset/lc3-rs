@@ -44,6 +44,7 @@ pub fn read(data: &[u8]) -> AssemblyInfo {
         if line.starts_with(".") {
             section = get_section(&line);
         } else if !line.is_empty() {
+            #[allow(clippy::single_match)] // TODO read other sections
             match section {
                 ObjectFileSection::Text => {
                     if orig_length > 0 {

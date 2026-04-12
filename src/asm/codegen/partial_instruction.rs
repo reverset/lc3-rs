@@ -55,9 +55,7 @@ impl PartialInstruction {
                 positive,
             };
 
-            let Some(desired_pos) = self.get_label_or_offset(0, abs_position, label_lookup) else {
-                return None;
-            };
+            let desired_pos = self.get_label_or_offset(0, abs_position, label_lookup)?;
 
             return Some(Instruction::Branch(flags, (desired_pos).into()).encode());
         }
@@ -109,11 +107,7 @@ impl PartialInstruction {
             }
 
             "jsr" => {
-                let Some(desired_pos) = self.get_label_or_offset(0, abs_position, label_lookup)
-                else {
-                    return None;
-                };
-
+                let desired_pos = self.get_label_or_offset(0, abs_position, label_lookup)?;
                 Some(Instruction::JumpSubroutine((desired_pos).into()).encode())
             }
 
@@ -130,10 +124,7 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
-                else {
-                    return None;
-                };
+                let desired_pos = self.get_label_or_offset(1, abs_position, label_lookup)?;
 
                 Some(Instruction::Load(dst, (desired_pos).into()).encode())
             }
@@ -143,10 +134,7 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
-                else {
-                    return None;
-                };
+                let desired_pos = self.get_label_or_offset(1, abs_position, label_lookup)?;
 
                 Some(Instruction::LoadIndirect(dst, (desired_pos).into()).encode())
             }
@@ -172,10 +160,7 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
-                else {
-                    return None;
-                };
+                let desired_pos = self.get_label_or_offset(1, abs_position, label_lookup)?;
 
                 Some(Instruction::LoadEffectiveAddress(dst, (desired_pos).into()).encode())
             }
@@ -200,10 +185,7 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
-                else {
-                    return None;
-                };
+                let desired_pos = self.get_label_or_offset(1, abs_position, label_lookup)?;
 
                 Some(Instruction::Store(sr, (desired_pos).into()).encode())
             }
@@ -213,10 +195,7 @@ impl PartialInstruction {
                     return None;
                 };
 
-                let Some(desired_pos) = self.get_label_or_offset(1, abs_position, label_lookup)
-                else {
-                    return None;
-                };
+                let desired_pos = self.get_label_or_offset(1, abs_position, label_lookup)?;
 
                 Some(Instruction::StoreIndirect(sr, (desired_pos).into()).encode())
             }

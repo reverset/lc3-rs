@@ -324,11 +324,12 @@ impl<'a> Machine<'a> {
 
         self.add_io_callback(MCR, |machine, event| {
             if let MemoryModificationEvent::Write(value) = event
-                && value >= 0 {
-                    // 15th bit is cleared
-                    // time to halt
-                    machine.halted = true;
-                }
+                && value >= 0
+            {
+                // 15th bit is cleared
+                // time to halt
+                machine.halted = true;
+            }
         });
     }
 
