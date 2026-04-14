@@ -3,20 +3,28 @@ use std::collections::HashMap;
 use crate::{asm::codegen::partial_instruction::PartialInstruction, asm::tokenizer::Token};
 use lc3::vm::instructions::Register;
 
+
+// TODO: ParserError should be like TokenizerResult.
+#[derive(Debug)]
+pub struct TrackedToken {
+    pub token: Token,
+    pub index: usize,
+}
+
 #[derive(Debug)]
 pub enum ParserError {
-    UnexpectedToken(Token),
+    UnexpectedToken(TrackedToken),
     UnexpectedEOF,
     NoOrig,
 
-    ExpectedRegister(Token),
-    InvalidInstruction(Token),
-    ExpectedImmediate5(Token),
-    ExpectedLabel(Token),
-    ExpectedOffset9(Token),
-    ExpectedOffset11(Token),
-    ExpectedOffset6(Token),
-    ExpectedTrapVect8(Token),
+    ExpectedRegister(TrackedToken),
+    InvalidInstruction(TrackedToken),
+    ExpectedImmediate5(TrackedToken),
+    ExpectedLabel(TrackedToken),
+    ExpectedOffset9(TrackedToken),
+    ExpectedOffset11(TrackedToken),
+    ExpectedOffset6(TrackedToken),
+    ExpectedTrapVect8(TrackedToken),
 
     CompoundError(Vec<ParserError>),
 }
@@ -130,6 +138,13 @@ impl Parser {
         })
     }
 
+    fn track(&self, token: Token) -> TrackedToken {
+        TrackedToken {
+            token,
+            index: self.pointer.saturating_sub(1),
+        }
+    }
+
     fn parse_orig(&mut self) -> Result<AstNode, ParserError> {
         let mut result = Vec::new();
 
@@ -149,7 +164,7 @@ impl Parser {
                         Token::Blkw(val) => AstNode::Blkw(*val),
                         Token::Stringz(val) => AstNode::Stringz(val.clone()),
 
-                        _ => return Err(ParserError::UnexpectedToken(next)),
+                        _ => return Err(ParserError::UnexpectedToken(self.track(next))),
                     };
 
                     result.push(ast);
@@ -260,7 +275,7 @@ impl Parser {
                 vec![Operand::Number(0x25)],
             ))),
 
-            _ => Err(ParserError::UnexpectedToken(token.clone())),
+            _ => Err(ParserError::UnexpectedToken(self.track(token.clone()))),
         }
     }
 
@@ -271,7 +286,7 @@ impl Parser {
             // offset 6 is used for register offsets, so no labels in this case
             // Token::Label(label) => Ok(Operand::Label(label)),
             Token::Number(num) if (-128..=127).contains(&num) => Ok(Operand::Number(num)),
-            _ => Err(ParserError::ExpectedTrapVect8(n)),
+            _ => Err(ParserError::ExpectedTrapVect8(self.track(n))),
         }
     }
 
@@ -282,7 +297,7 @@ impl Parser {
             // offset 6 is used for register offsets, so no labels in this case
             // Token::Label(label) => Ok(Operand::Label(label)),
             Token::Number(num) if (-32..=31).contains(&num) => Ok(Operand::Number(num)),
-            _ => Err(ParserError::ExpectedOffset6(n)),
+            _ => Err(ParserError::ExpectedOffset6(self.track(n))),
         }
     }
 
@@ -295,10 +310,10 @@ impl Parser {
                 if (-1024..=1023).contains(&num) {
                     Ok(Operand::Number(num))
                 } else {
-                    Err(ParserError::ExpectedOffset11(n))
+                    Err(ParserError::ExpectedOffset11(self.track(n)))
                 }
             }
-            _ => Err(ParserError::ExpectedLabel(n)),
+            _ => Err(ParserError::ExpectedLabel(self.track(n))),
         }
     }
 
@@ -311,10 +326,10 @@ impl Parser {
                 if (-256..=255).contains(&num) {
                     Ok(Operand::Number(num))
                 } else {
-                    Err(ParserError::ExpectedOffset9(n))
+                    Err(ParserError::ExpectedOffset9(self.track(n)))
                 }
             }
-            _ => Err(ParserError::ExpectedLabel(n)),
+            _ => Err(ParserError::ExpectedLabel(self.track(n))),
         }
     }
 
@@ -324,7 +339,7 @@ impl Parser {
         match n {
             Token::Number(n) if (-16..=15).contains(&n) => Ok(Operand::Number(n)),
 
-            _ => Err(ParserError::ExpectedImmediate5(n)),
+            _ => Err(ParserError::ExpectedImmediate5(self.track(n))),
         }
     }
 
@@ -333,7 +348,7 @@ impl Parser {
         match n {
             Token::Register(reg) => Ok(Operand::Register(Register::from(reg))),
 
-            _ => Err(ParserError::ExpectedRegister(n)),
+            _ => Err(ParserError::ExpectedRegister(self.track(n))),
         }
     }
 

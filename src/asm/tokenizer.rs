@@ -79,7 +79,7 @@ impl<T> From<Result<T, TokenizerErrorInfo>> for TokenizerResult<T> {
 
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct TokenizerErrorInfo {
-    pub line: usize,
+    pub index: usize,
     pub kind: TokenizerErrorKind,
 }
 
@@ -205,12 +205,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn create_error_info(&self, kind: TokenizerErrorKind) -> TokenizerErrorInfo {
-        let line = self.source[..self.pointer]
-            .chars()
-            .filter(|c| *c == '\n')
-            .count()
-            + 1;
-        TokenizerErrorInfo { line, kind }
+        TokenizerErrorInfo { index: self.pointer-1, kind }
     }
 
     fn check_register(&mut self, word: &str) -> TokenizerResult<Token> {

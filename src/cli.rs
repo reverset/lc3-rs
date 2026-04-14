@@ -21,7 +21,7 @@ use crate::asm::codegen::Codegen;
 #[cfg(feature = "asm")]
 use crate::asm::codegen::lc3tools_codegen::Lc3ToolsCodegen;
 #[cfg(feature = "asm")]
-use crate::asm::parser::Parser;
+use crate::asm::parser::{Parser, ParserError};
 #[cfg(feature = "asm")]
 use crate::asm::tokenizer::TokenizerErrorInfo;
 use crate::cli_tools::get_flag;
@@ -64,16 +64,41 @@ Subcommands:
 }
 
 #[cfg(feature = "asm")]
-fn format_tokenizer_error(err: TokenizerErrorInfo, source: &str) -> String {
-    let source_cause: Vec<&str> = source
+fn get_line_num(source: &str, index: usize) -> usize {
+    source[..index].lines().count()
+}
+
+#[cfg(feature = "asm")]
+fn get_relevant_snippet(source: &str, line: usize) -> String {
+    source
         .lines()
-        .skip(err.line.saturating_sub(4))
+        .enumerate()
+        .skip(line.saturating_sub(4))
         .take(8)
-        .collect();
+        .map(|(i, line)| format!("{:4}| {line}", i+1))
+        .collect::<Vec<String>>()
+        .join("\n")
+}
 
-    let cause = source_cause.join("\n");
 
-    format!("Error: {err:?}\n\n{cause}")
+#[cfg(feature = "asm")]
+fn format_tokenizer_error(err: TokenizerErrorInfo, source: &str, file_name: &Path) -> String {
+    let mut source = source.to_string();
+    source.insert_str(err.index, " <- Error occurred here...\t");
+
+    let line = get_line_num(&source, err.index);
+
+    let snippet = get_relevant_snippet(&source, line);
+    
+    format!("Error: {}:{}\n{err:?}\n\n{snippet}", file_name.display(), line)
+}
+
+#[cfg(feature = "asm")]
+fn format_parser_error(err: ParserError, source: &str, file_name: &Path) -> String {
+    // let mut source = source.to_string();
+    // source.insert_str(err., " <- Error occurred here...\t");
+
+    format!("Parsing failed: {err:?}")
 }
 
 #[cfg(feature = "asm")]
@@ -95,7 +120,7 @@ fn asm_file(path: &str, args: &[&str]) -> std::io::Result<()> {
     let tokens = match tokenizer.tokenize() {
         TokenizerResult::Ok(tokens) => tokens,
         TokenizerResult::Err(err) => {
-            println!("{}", format_tokenizer_error(err, &contents).red());
+            eprintln!("{}", format_tokenizer_error(err, &contents, Path::new(path)).red());
 
             return Ok(());
         }
@@ -114,7 +139,7 @@ fn asm_file(path: &str, args: &[&str]) -> std::io::Result<()> {
         Ok(ast) => ast,
         Err(err) => {
             // TODO! better errors
-            println!("Error: {err:?}");
+            eprintln!("{}", format_parser_error(err, &contents, Path::new(path)).red());
             return Ok(());
         }
     };
