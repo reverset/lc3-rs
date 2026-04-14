@@ -1,3 +1,8 @@
+#![deprecated(
+    since = "0.9.5",
+    note = "Will be replaced with a similar format that allows for more sections than just one .orig"
+)]
+
 use std::io::Read;
 
 use crate::io::{AssemblyInfo, DataInfo};
