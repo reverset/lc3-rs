@@ -1,30 +1,28 @@
 use std::collections::HashMap;
 
-use crate::{asm::codegen::partial_instruction::PartialInstruction, asm::tokenizer::Token};
+use crate::asm::{codegen::partial_instruction::PartialInstruction, tokenizer::{Token, TokenKind}};
 use lc3::vm::instructions::Register;
 
-
-// TODO: ParserError should be like TokenizerResult.
 #[derive(Debug)]
-pub struct TrackedToken {
+pub struct ParserError {
     pub token: Token,
-    pub index: usize,
+    pub kind: ParserErrorKind,
 }
 
 #[derive(Debug)]
-pub enum ParserError {
-    UnexpectedToken(TrackedToken),
+pub enum ParserErrorKind {
+    UnexpectedToken,
     UnexpectedEOF,
     NoOrig,
 
-    ExpectedRegister(TrackedToken),
-    InvalidInstruction(TrackedToken),
-    ExpectedImmediate5(TrackedToken),
-    ExpectedLabel(TrackedToken),
-    ExpectedOffset9(TrackedToken),
-    ExpectedOffset11(TrackedToken),
-    ExpectedOffset6(TrackedToken),
-    ExpectedTrapVect8(TrackedToken),
+    ExpectedRegister,
+    InvalidInstruction,
+    ExpectedImmediate5,
+    ExpectedLabel,
+    ExpectedOffset9,
+    ExpectedOffset11,
+    ExpectedOffset6,
+    ExpectedTrapVect8,
 
     CompoundError(Vec<ParserError>),
 }
@@ -110,6 +108,10 @@ impl Parser {
         Self { tokens, pointer: 0 }
     }
 
+    fn err<T>(&self, token: Token, err: ParserErrorKind) -> Result<T, ParserError> {
+        Err(ParserError { token, kind: err })
+    }
+
     pub fn parse(mut self) -> Result<Ast, ParserError> {
         let mut origs = Vec::new();
         loop {
@@ -124,8 +126,8 @@ impl Parser {
                     if origs.is_empty() {
                         return Err(err);
                     } else {
-                        match err {
-                            ParserError::UnexpectedEOF => break,
+                        match err.kind {
+                            ParserErrorKind::UnexpectedEOF => break,
                             _ => return Err(err),
                         }
                     }
@@ -138,33 +140,26 @@ impl Parser {
         })
     }
 
-    fn track(&self, token: Token) -> TrackedToken {
-        TrackedToken {
-            token,
-            index: self.pointer.saturating_sub(1),
-        }
-    }
-
     fn parse_orig(&mut self) -> Result<AstNode, ParserError> {
         let mut result = Vec::new();
 
         let start = self.next()?;
-        match start {
-            Token::Origin(index) => {
+        match start.kind {
+            TokenKind::Origin(index) => {
                 loop {
                     let next = self.next()?;
                     // println!("got token: {next:?}");
 
-                    let ast = match &next {
-                        Token::End => break,
-                        Token::Label(label) => AstNode::Label(label.clone()),
-                        Token::Instruction(opcode) => self.parse_instruction(opcode, &next)?,
+                    let ast = match &next.kind {
+                        TokenKind::End => break,
+                        TokenKind::Label(label) => AstNode::Label(label.clone()),
+                        TokenKind::Instruction(opcode) => self.parse_instruction(opcode, &next)?,
 
-                        Token::Fill(val) => AstNode::Fill(*val),
-                        Token::Blkw(val) => AstNode::Blkw(*val),
-                        Token::Stringz(val) => AstNode::Stringz(val.clone()),
+                        TokenKind::Fill(val) => AstNode::Fill(*val),
+                        TokenKind::Blkw(val) => AstNode::Blkw(*val),
+                        TokenKind::Stringz(val) => AstNode::Stringz(val.clone()),
 
-                        _ => return Err(ParserError::UnexpectedToken(self.track(next))),
+                        _ => return self.err(next, ParserErrorKind::UnexpectedToken),
                     };
 
                     result.push(ast);
@@ -173,7 +168,7 @@ impl Parser {
                 Ok(AstNode::Orig(index, result))
             }
 
-            _ => Err(ParserError::NoOrig),
+            _ => self.err(start, ParserErrorKind::NoOrig),
         }
     }
 
@@ -194,7 +189,7 @@ impl Parser {
                     self.expect_register().or_else(|err1| {
                         self.backtrack(); // TODO: implement custom Result type where backtracking can be made automatic by storing the 'starting' pointer.
                         self.expect_immediate_5()
-                            .map_err(|err2| ParserError::CompoundError(vec![err1, err2]))
+                            .map_err(|err2| ParserError { token: token.clone(), kind: ParserErrorKind::CompoundError(vec![err1, err2]) })
                     })?,
                 ],
             ))),
@@ -275,80 +270,80 @@ impl Parser {
                 vec![Operand::Number(0x25)],
             ))),
 
-            _ => Err(ParserError::UnexpectedToken(self.track(token.clone()))),
+            _ => self.err(token.clone(), ParserErrorKind::UnexpectedToken),
         }
     }
 
     fn expect_trapvect8(&mut self) -> Result<Operand, ParserError> {
         let n = self.next()?;
 
-        match n {
+        match n.kind {
             // offset 6 is used for register offsets, so no labels in this case
             // Token::Label(label) => Ok(Operand::Label(label)),
-            Token::Number(num) if (-128..=127).contains(&num) => Ok(Operand::Number(num)),
-            _ => Err(ParserError::ExpectedTrapVect8(self.track(n))),
+            TokenKind::Number(num) if (-128..=127).contains(&num) => Ok(Operand::Number(num)),
+            _ => self.err(n, ParserErrorKind::ExpectedTrapVect8),
         }
     }
 
     fn expect_offset_6(&mut self) -> Result<Operand, ParserError> {
         let n = self.next()?;
 
-        match n {
+        match n.kind {
             // offset 6 is used for register offsets, so no labels in this case
             // Token::Label(label) => Ok(Operand::Label(label)),
-            Token::Number(num) if (-32..=31).contains(&num) => Ok(Operand::Number(num)),
-            _ => Err(ParserError::ExpectedOffset6(self.track(n))),
+            TokenKind::Number(num) if (-32..=31).contains(&num) => Ok(Operand::Number(num)),
+            _ => self.err(n, ParserErrorKind::ExpectedOffset6),
         }
     }
 
     fn expect_label_or_offset_11(&mut self) -> Result<Operand, ParserError> {
         let n = self.next()?;
 
-        match n {
-            Token::Label(label) => Ok(Operand::Label(label)),
-            Token::Number(num) => {
+        match n.kind {
+            TokenKind::Label(label) => Ok(Operand::Label(label)),
+            TokenKind::Number(num) => {
                 if (-1024..=1023).contains(&num) {
                     Ok(Operand::Number(num))
                 } else {
-                    Err(ParserError::ExpectedOffset11(self.track(n)))
+                    self.err(n, ParserErrorKind::ExpectedOffset11)
                 }
             }
-            _ => Err(ParserError::ExpectedLabel(self.track(n))),
+            _ => self.err(n, ParserErrorKind::ExpectedLabel),
         }
     }
 
     fn expect_label_or_offset_9(&mut self) -> Result<Operand, ParserError> {
         let n = self.next()?;
 
-        match n {
-            Token::Label(label) => Ok(Operand::Label(label)),
-            Token::Number(num) => {
+        match n.kind {
+            TokenKind::Label(label) => Ok(Operand::Label(label)),
+            TokenKind::Number(num) => {
                 if (-256..=255).contains(&num) {
                     Ok(Operand::Number(num))
                 } else {
-                    Err(ParserError::ExpectedOffset9(self.track(n)))
+                    self.err(n, ParserErrorKind::ExpectedOffset9)
                 }
             }
-            _ => Err(ParserError::ExpectedLabel(self.track(n))),
+            _ => self.err(n, ParserErrorKind::ExpectedLabel),
         }
     }
 
     fn expect_immediate_5(&mut self) -> Result<Operand, ParserError> {
         let n = self.next()?;
 
-        match n {
-            Token::Number(n) if (-16..=15).contains(&n) => Ok(Operand::Number(n)),
+        match n.kind {
+            TokenKind::Number(n) if (-16..=15).contains(&n) => Ok(Operand::Number(n)),
 
-            _ => Err(ParserError::ExpectedImmediate5(self.track(n))),
+            _ => self.err(n, ParserErrorKind::ExpectedImmediate5),
         }
     }
 
     fn expect_register(&mut self) -> Result<Operand, ParserError> {
         let n = self.next()?;
-        match n {
-            Token::Register(reg) => Ok(Operand::Register(Register::from(reg))),
+        match n.kind {
+            TokenKind::Register(reg) => Ok(Operand::Register(Register::from(reg))),
 
-            _ => Err(ParserError::ExpectedRegister(self.track(n))),
+            _ => self.err(n, ParserErrorKind::ExpectedRegister),
         }
     }
 
@@ -370,7 +365,9 @@ impl Parser {
             self.pointer += 1;
             Ok(token)
         } else {
-            Err(ParserError::UnexpectedEOF)
+            // todo this is kinda weird
+            self.err(Token { kind: TokenKind::End, source_index: self.tokens.last().map(|token| token.source_index).expect("nothing to parse") }, ParserErrorKind::UnexpectedEOF)
+            // Err(ParserErrorKind::UnexpectedEOF)
         }
     }
 }

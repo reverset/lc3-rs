@@ -25,8 +25,14 @@ pub struct TokenizerErrorInfo {
     pub kind: TokenizerErrorKind,
 }
 
+#[derive(Debug, Eq, Clone, PartialEq)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub source_index: usize,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Token {
+pub enum TokenKind {
     Origin(u16),
     End,
     Fill(i16),
@@ -94,6 +100,10 @@ impl<'a> Tokenizer<'a> {
         TokenizerResult::Ok(self.tokens)
     }
 
+    fn make_token(&self, kind: TokenKind) -> Token {
+        Token { kind, source_index: self.pointer }
+    }
+
     fn err<T>(&self, kind: TokenizerErrorKind) -> TokenizerResult<T> {
         TokenizerResult::Err(self.create_error_info(kind))
     }
@@ -103,7 +113,7 @@ impl<'a> Tokenizer<'a> {
             if first.is_ascii_digit() {
                 self.err(TokenizerErrorKind::InvalidLabel)
             } else {
-                TokenizerResult::Ok(Token::Label(word.to_string()))
+                TokenizerResult::Ok(self.make_token(TokenKind::Label(word.to_string())))
             }
         } else {
             // println!("FAILED");
@@ -140,7 +150,7 @@ impl<'a> Tokenizer<'a> {
         if let Some(c) = word.chars().nth(0)
             && (c.is_ascii_digit() || c == '#' || c == 'x')
         {
-            self.read_next_i16_num(word).map(Token::Number)
+            self.read_next_i16_num(word).map(|num| self.make_token(TokenKind::Number(num)))
         } else {
             TokenizerResult::Fallthrough
         }
@@ -161,7 +171,7 @@ impl<'a> Tokenizer<'a> {
                 Some(num_str) => {
                     let num = (num_str as u8).wrapping_sub(48);
                     if num <= 7 {
-                        TokenizerResult::Ok(Token::Register(num))
+                        TokenizerResult::Ok(self.make_token(TokenKind::Register(num)))
                     } else {
                         self.err(TokenizerErrorKind::InvalidRegister)
                     }
@@ -176,7 +186,7 @@ impl<'a> Tokenizer<'a> {
 
     fn check_instruction(&mut self, current_word: &str) -> TokenizerResult<Token> {
         if INSTRUCTIONS.contains(&current_word) {
-            TokenizerResult::Ok(Token::Instruction(current_word.to_string()))
+            TokenizerResult::Ok(self.make_token(TokenKind::Instruction(current_word.to_string())))
         } else {
             TokenizerResult::Fallthrough
         }
@@ -190,20 +200,20 @@ impl<'a> Tokenizer<'a> {
                 ".orig" => {
                     let word = tryit!(self.consume_word()).to_string();
                     let index = tryit!(self.read_next_u16_bit_num(&word));
-                    TokenizerResult::Ok(Token::Origin(index))
+                    TokenizerResult::Ok(self.make_token(TokenKind::Origin(index)))
                 }
 
                 ".fill" => {
                     let word = tryit!(self.consume_word()).to_string();
                     let index = tryit!(self.read_next_i16_num(&word));
-                    TokenizerResult::Ok(Token::Fill(index))
+                    TokenizerResult::Ok(self.make_token(TokenKind::Fill(index)))
                 }
 
-                ".end" => TokenizerResult::Ok(Token::End),
+                ".end" => TokenizerResult::Ok(self.make_token(TokenKind::End)),
 
                 ".stringz" => {
                     let s = tryit!(self.read_string());
-                    TokenizerResult::Ok(Token::Stringz(s.to_string()))
+                    TokenizerResult::Ok(self.make_token(TokenKind::Stringz(s.to_string())))
                 }
 
                 ".blkw" => {
@@ -213,7 +223,7 @@ impl<'a> Tokenizer<'a> {
                     if count == 0 {
                         self.err(TokenizerErrorKind::BlkwParameterTooSmall)
                     } else {
-                        TokenizerResult::Ok(Token::Blkw(count))
+                        TokenizerResult::Ok(self.make_token(TokenKind::Blkw(count)))
                     }
                 }
 
