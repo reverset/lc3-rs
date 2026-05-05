@@ -21,7 +21,7 @@ use crate::asm::codegen::Codegen;
 #[cfg(feature = "asm")]
 use crate::asm::codegen::lc3tools_codegen::Lc3ToolsCodegen;
 #[cfg(feature = "asm")]
-use crate::asm::parser::{Parser, ParserErrorKind};
+use crate::asm::parser::{Parser, ParserError, ParserErrorKind};
 #[cfg(feature = "asm")]
 use crate::asm::tokenizer::TokenizerErrorInfo;
 use crate::cli_tools::get_flag;
@@ -94,11 +94,14 @@ fn format_tokenizer_error(err: TokenizerErrorInfo, source: &str, file_name: &Pat
 }
 
 #[cfg(feature = "asm")]
-fn format_parser_error(err: ParserErrorKind, source: &str, file_name: &Path) -> String {
-    // let mut source = source.to_string();
-    // source.insert_str(err., " <- Error occurred here...\t");
+fn format_parser_error(err: ParserError, source: &str, file_name: &Path) -> String {
+    let mut source = source.to_string();
+    source.insert_str(err.token.source_index, " <- Error occurred here...\t");
 
-    format!("Parsing failed: {err:?}")
+    let line = get_line_num(&source, err.token.source_index);
+    let snippet = get_relevant_snippet(&source, line);
+
+    format!("Error: {}:{}\n{err:?}\n\n{snippet}", file_name.display(), line)
 }
 
 #[cfg(feature = "asm")]
@@ -139,7 +142,7 @@ fn asm_file(path: &str, args: &[&str]) -> std::io::Result<()> {
         Ok(ast) => ast,
         Err(err) => {
             // TODO! better errors
-            eprintln!("{}", format_parser_error(err.kind, &contents, Path::new(path)).red());
+            eprintln!("{}", format_parser_error(err, &contents, Path::new(path)).red());
             return Ok(());
         }
     };
