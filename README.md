@@ -13,11 +13,12 @@ cargo run -r --bin lc3-cli --all-features -- run examples/hello2.obj
 | Feature          | Info                                |
 |------------------|-------------------------------------|
 | Virtual Machine  | ✅                                  |
-| Assembler        | 🚧                                  |
+| Assembler        | ✅                                  |
 | Disassembler     | soon™️                              |
 | C Compiler       | soon™️                              |
 
-- Assembler is very basic at the moment, not ready yet.
+> [!WARNING]
+> Assembler is functional, but error messages aren't perfect and there may be a few bugs.
 
 ## References
 - Introduction To Computing Systems: From Bits & Gates To C/C++ & Beyond (3rd Edition)
@@ -68,6 +69,5 @@ cargo run -r --bin lc3-cli --all-features -- run examples/hello2.obj
     - `putsp` TRAP vector
     - And maybe a few other things.
 - Assembler
-    - Revamp error messages (completely terrible at the moment)
     - Raw output format planned (currently outputs the same format as LC3Tools, without symbols or debug)
     - Linking
