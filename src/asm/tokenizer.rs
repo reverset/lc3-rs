@@ -1,6 +1,6 @@
 // TODO! Add line number information into the tokens for error reporting
 
-use core::panic;
+use crate::{asm::Attempt, tryit};
 
 const INSTRUCTIONS: &[&str] = &[
     "add", "and", "brn", "brnz", "brnzp", "brz", "brzp", "brp", "brnz", "brnp", "jmp", "jsr",
@@ -8,65 +8,7 @@ const INSTRUCTIONS: &[&str] = &[
     "puts", "in", "out", "halt", // trap vector convienences
 ];
 
-// for some reason the Try trait is still 'experimental', so in order to implement
-// similiar behavior for TokenizerResult, I use this macro.
-macro_rules! tryit {
-    ($what:expr) => {{
-        let val = $what;
-        match val {
-            TokenizerResult::Ok(val) => val,
-            _ => return (val).coalesce_type(),
-        }
-    }};
-}
-
-#[derive(Debug)]
-pub enum TokenizerResult<T> {
-    Ok(T),
-    Err(TokenizerErrorInfo),
-    Fallthrough,
-}
-
-#[allow(unused)]
-impl<T> TokenizerResult<T> {
-    pub fn map<T2>(self, map: impl FnOnce(T) -> T2) -> TokenizerResult<T2> {
-        match self {
-            TokenizerResult::Ok(val) => TokenizerResult::Ok(map(val)),
-
-            _ => self.coalesce_type(),
-        }
-    }
-
-    pub fn has_fallen(&self) -> bool {
-        matches!(self, Self::Fallthrough)
-    }
-
-    pub fn unwrap(self) -> T {
-        match self {
-            Self::Ok(val) => val,
-
-            _ => panic!("TokenizerResult was not Ok"),
-        }
-    }
-
-    pub fn is_ok(&self) -> bool {
-        matches!(self, Self::Ok(_))
-    }
-
-    pub fn if_fell(self, map: impl FnOnce() -> Self) -> Self {
-        if self.has_fallen() { map() } else { self }
-    }
-
-    pub fn coalesce_type<T2>(self) -> TokenizerResult<T2> {
-        match self {
-            TokenizerResult::Ok(_) => {
-                panic!("TokenizerResult was Ok(_) which is invalid for this method.")
-            }
-            TokenizerResult::Err(err) => TokenizerResult::Err(err),
-            TokenizerResult::Fallthrough => TokenizerResult::Fallthrough,
-        }
-    }
-}
+pub type TokenizerResult<T> = Attempt<T, TokenizerErrorInfo>;
 
 impl<T> From<Result<T, TokenizerErrorInfo>> for TokenizerResult<T> {
     fn from(value: Result<T, TokenizerErrorInfo>) -> Self {
