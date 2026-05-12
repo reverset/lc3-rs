@@ -64,6 +64,21 @@ Subcommands:
 }
 
 #[cfg(feature = "asm")]
+fn line_to_index(source: &str, line: usize) -> Option<usize> {
+    let mut lines_seen = 0usize;
+    for (i, c) in source.chars().enumerate() {
+        if c == '\n' {
+            lines_seen += 1;
+            if lines_seen == line {
+                return Some(i)
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(feature = "asm")]
 fn get_line_num(source: &str, index: usize) -> usize {
     source[..index].lines().count()
 }
@@ -95,11 +110,15 @@ fn format_tokenizer_error(err: TokenizerErrorInfo, source: &str, file_name: &Pat
 
 #[cfg(feature = "asm")]
 fn format_parser_error(err: ParserError, source: &str, file_name: &Path) -> String {
-    let mut source = source.to_string();
-    source.insert_str(err.token.source_index, " <- Error occurred here...\t");
-
+    let source = source.to_string();
     let line = get_line_num(&source, err.token.source_index);
-    let snippet = get_relevant_snippet(&source, line);
+
+    let pre: String = source.lines().map(|l| l.to_owned() + "\n").take(line-1).collect();
+    let failed = source.lines().skip(line-1).nth(0).unwrap();
+    let post: String = source.lines().map(|l| l.to_owned() + "\n").skip(line).collect();
+    let new_source = format!("{}{}\n{}", pre.red(), failed.on_red(), post.red());
+
+    let snippet = get_relevant_snippet(&new_source, line);
 
     format!("Error: {}:{}\n{err:?}\n\n{snippet}", file_name.display(), line)
 }
