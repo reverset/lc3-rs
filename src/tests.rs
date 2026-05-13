@@ -486,6 +486,26 @@ fn test_in() {
     assert_eq!(res, "Prompt:5");
 }
 
+#[test]
+fn test_rti_restores_privilege() {
+    let mut machine = Machine::new_x3000(&[
+        Instruction::Trap(0x20), // Trigger a TRAP to enter Supervisor mode
+        Instruction::trap_halt(),
+    ]);
+
+    // Step into the TRAP
+    machine.step();
+    assert_eq!(machine.privilege, PrivilegeMode::Supervisor);
+    assert_eq!(machine.registers.mode, PrivilegeMode::Supervisor);
+
+    // Manually execute RTI to verify privilege and stack mode restoration
+    machine.evaluate(Instruction::ReturnFromInterrupt).expect("RTI should succeed in Supervisor mode");
+
+    // Verify both machine privilege and register mode are restored to User
+    assert_eq!(machine.privilege, PrivilegeMode::User, "Machine privilege should be User");
+    assert_eq!(machine.registers.mode, PrivilegeMode::User, "Registers mode should be User");
+}
+
 pub fn run_given_in_out(machine: &mut Machine, input: &[u8]) -> String {
     let mut buf = String::new();
 

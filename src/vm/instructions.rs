@@ -168,7 +168,7 @@ pub enum Instruction {
     LoadEffectiveAddress(Register, PcOffset9),
     Not(Register, Register),
     // RET is just a special case of JMP,
-    ReturnFromInterrupt, // TODO
+    ReturnFromInterrupt,
     Store(Register, PcOffset9),
     StoreIndirect(Register, PcOffset9),
     StoreRegister(Register, Register, Offset6),

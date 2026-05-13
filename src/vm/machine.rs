@@ -547,9 +547,9 @@ impl<'a> Machine<'a> {
     pub fn decode_psr(&mut self, psr: u16) {
         let privilege = psr >> 15;
         if privilege == 0 {
-            self.privilege = PrivilegeMode::Supervisor;
+            self.set_privilege(PrivilegeMode::Supervisor);
         } else {
-            self.privilege = PrivilegeMode::User;
+            self.set_privilege(PrivilegeMode::User);
         }
 
         let cond_codes = psr & 0b111;
