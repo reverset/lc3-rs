@@ -13,12 +13,12 @@ cargo run -r --bin lc3-cli --all-features -- run examples/hello2.obj
 | Feature          | Info                                |
 |------------------|-------------------------------------|
 | Virtual Machine  | ✅                                  |
-| Assembler        | ✅                                  |
+| Assembler        | 🚧                                  |
 | Disassembler     | soon™️                              |
 | C Compiler       | soon™️                              |
 
 > [!WARNING]
-> Assembler is functional, but error messages aren't perfect and there may be a few bugs.
+> Assembler is mostly functional, but error messages aren't perfect and there may be a few bugs.
 
 ## References
 - Introduction To Computing Systems: From Bits & Gates To C/C++ & Beyond (3rd Edition)
@@ -71,3 +71,4 @@ cargo run -r --bin lc3-cli --all-features -- run examples/hello2.obj
 - Assembler
     - Raw output format planned (currently outputs the same format as LC3Tools, without symbols or debug)
     - Linking
+    - `.fill LABEL` not supported yet, only numbers.
