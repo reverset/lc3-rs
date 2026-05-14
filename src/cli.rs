@@ -210,6 +210,9 @@ fn run_file(path: &str, args: &[&str]) -> std::io::Result<()> {
         machine.set_span_at(datum.orig, &datum.data);
     }
 
+    let peek_addr = get_param(args, "mempeek", None)
+        .map(|peek| u16::from_str_radix(&peek, 16).unwrap());
+
     crossterm::terminal::enable_raw_mode()?;
 
     while !machine.halted {
@@ -238,6 +241,11 @@ fn run_file(path: &str, args: &[&str]) -> std::io::Result<()> {
     }
 
     crossterm::terminal::disable_raw_mode()?;
+
+    if let Some(addr) = peek_addr {
+        let result = machine.get_memory_at_unchecked(addr);
+        println!("\n\nx{addr:x} => {result}")
+    }
 
     Ok(())
 }
