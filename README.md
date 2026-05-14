@@ -14,8 +14,9 @@ cargo run -r --bin lc3-cli --all-features -- run examples/hello2.obj
 |------------------|-------------------------------------|
 | Virtual Machine  | ✅                                  |
 | Assembler        | 🚧                                  |
-| Disassembler     | soon™️                              |
+| GUI App          | soon™️                              |
 | C Compiler       | soon™️                              |
+| Disassembler     | soon™️                              |
 
 > [!WARNING]
 > Assembler is mostly functional, but error messages aren't perfect and there may be a few bugs.
